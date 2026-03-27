@@ -252,19 +252,23 @@ Establish foundational SDK integrations and prove the compounding cycle works en
 1. Create POC script
    ```typescript
    // backend/src/scripts/poc-compounding.ts
+   const FEE_THRESHOLD_SOL = 7; // Minimum SOL to trigger claiming
+
    async function runCompoundingCycle() {
-     // 1. Check claimable fees
-     // 2. Claim fees
-     // 3. Swap to target tokens
+     // 1. Check claimable fees (must be >= 7 SOL)
+     // 2. If threshold met: Claim fees
+     // 3. Reserve portion for tx costs, swap rest to target tokens
      // 4. Add liquidity
-     // 5. Lock position
-     // 6. Claim fees from locked position
+     // 5. Lock position permanently
+     // 6. Distribute LP fees automatically
    }
    ```
 
 2. Implement fee checking step
    - Query Bags API for claimable fees
-   - Log available amounts
+   - Check if accrued fees >= 7 SOL threshold
+   - Log available amounts and threshold status
+   - Only proceed if threshold is met
 
 3. Implement fee claiming step
    - Generate claim transaction via Bags API

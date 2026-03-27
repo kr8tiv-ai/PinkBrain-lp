@@ -58,6 +58,20 @@ This phase establishes the foundational integrations and proves the compounding 
 - DAS API `getTokenAccounts` for token holder snapshots
 - Enhanced webhooks for event-driven monitoring
 
+### Fee Claiming Threshold (Locked)
+- **Trigger threshold:** 7 SOL minimum before claiming
+- Fees must accrue to at least 7 SOL before the compounding cycle initiates
+- This ensures transaction costs don't exceed the value being compounded
+- Some accrued fees are used to cover deployment/transaction costs
+
+### Automatic Distribution (Locked)
+- When fees reach 7 SOL threshold, system automatically:
+  1. Claims the accrued fees
+  2. Uses portion of fees to cover transaction/gas costs
+  3. Swaps remaining into target tokens
+  4. Adds liquidity and locks
+  5. Distributes LP fees according to strategy settings
+
 ### Environment Configuration (Locked)
 - Environment variables for all secrets (no hardcoded keys)
 - `.env` file with:
@@ -65,6 +79,7 @@ This phase establishes the foundational integrations and proves the compounding 
   - `HELIUS_RPC_URL` - Helius RPC endpoint
   - `HELIUS_API_KEY` - Helius API key for enhanced features
   - `SOLANA_NETWORK` - mainnet-beta or devnet
+  - `FEE_THRESHOLD_SOL` - Minimum SOL to trigger claiming (default: 7)
 
 ### Claude's Discretion
 

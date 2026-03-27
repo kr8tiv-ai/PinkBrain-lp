@@ -47,6 +47,12 @@ DAMM v2 is the only viable choice because it supports:
 
 ## Key Features
 
+### Fee Claiming Threshold
+- **Minimum threshold: 7 SOL** before claiming triggers
+- System monitors accrued fees and only initiates compounding when ≥ 7 SOL
+- Portion of accrued fees covers transaction/gas costs
+- Remaining fees are compounded into liquidity
+
 ### Strategy Configuration
 Users configure compounding strategies with:
 - Source fee stream (`CLAIMABLE_POSITIONS` or `PARTNER_FEES`)
@@ -56,6 +62,7 @@ Users configure compounding strategies with:
 - Lock mode (PERMANENT - only option for v1)
 - Distribution mode (`OWNER_ONLY` or `TOP_100_HOLDERS`)
 - Schedule (cron/interval, minimum 1 hour)
+- **Fee threshold** (default: 7 SOL)
 
 ### Compounding Engine
 State machine with idempotent transitions:
