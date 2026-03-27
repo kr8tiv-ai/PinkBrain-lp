@@ -1,0 +1,64 @@
+/**
+ * Swap phase — takes claimed SOL, splits 50/50, and swaps to targetTokenA
+ * and targetTokenB via Bags API.
+ */
+
+import type { PhaseContext, SwapPhaseResult } from '../types.js';
+
+/** Wrapped SOL / native SOL mint address */
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+
+/**
+ * Execute the swap phase of a compounding run.
+ *
+ * Takes half of claimed SOL for each token swap.
+ * Gets quotes via Bags API, creates swap transactions, and sends them.
+ */
+export async function executeSwapPhase(ctx: PhaseContext): Promise<SwapPhaseResult> {
+  const { strategy, run, bagsClient, sender } = ctx;
+  const wallet = strategy.ownerWallet;
+
+  // Claim phase must have completed with a non-zero amount
+  const claimedAmount = run.claim?.claimableAmount ?? 0;
+  if (claimedAmount <= 0) {
+    return {
+      tokenAReceived: 0,
+      tokenBReceived: 0,
+      txSignatures: [],
+    };
+  }
+
+  // Split 50/50
+  const halfAmount = Math.floor(claimedAmount / 2);
+  const txSignatures: string[] = [];
+
+  // Swap half → tokenA
+  const quoteA = await bagsClient.getTradeQuote({
+    inputMint: SOL_MINT,
+    outputMint: strategy.targetTokenA,
+    amount: halfAmount,
+    slippageBps: strategy.swapConfig.slippageBps,
+  });
+
+  const swapTxA = await bagsClient.createSwapTransaction(quoteA, wallet);
+  const resultA = await sender.signAndSendTransaction(swapTxA.swapTransaction);
+  txSignatures.push(resultA.signature);
+
+  // Swap half → tokenB
+  const quoteB = await bagsClient.getTradeQuote({
+    inputMint: SOL_MINT,
+    outputMint: strategy.targetTokenB,
+    amount: halfAmount,
+    slippageBps: strategy.swapConfig.slippageBps,
+  });
+
+  const swapTxB = await bagsClient.createSwapTransaction(quoteB, wallet);
+  const resultB = await sender.signAndSendTransaction(swapTxB.swapTransaction);
+  txSignatures.push(resultB.signature);
+
+  return {
+    tokenAReceived: Number(quoteA.outAmount),
+    tokenBReceived: Number(quoteB.outAmount),
+    txSignatures,
+  };
+}

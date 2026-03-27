@@ -24,13 +24,14 @@ interface HeliusPriorityFeeResponse {
 
 interface HeliusTokenAccountsResponse {
   result: {
-    items: Array<{
+    token_accounts: Array<{
       address: string;
       amount: string;
       decimals: number;
       owner: string;
-      token_address?: string;
+      mint?: string;
     }>;
+    cursor?: string;
   };
 }
 
@@ -160,44 +161,52 @@ export class HeliusClient {
   // ============================================
 
   /**
-   * Get all token accounts for a specific mint
+   * Get all token accounts for a specific mint using DAS getTokenAccounts
    * Used for top-100 holder snapshots
+   * Uses cursor-based pagination to fetch all results
    */
   async getTokenAccounts(
     mint: PublicKey,
     options?: {
       limit?: number;
-      page?: number;
+      cursor?: string;
     }
   ): Promise<TokenAccount[]> {
-    const response = await fetch(this.rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'get-token-accounts',
-        method: 'searchAssets',
-        params: {
-          query: {
-            token: {
-              mint: mint.toString(),
-            },
-          },
-          limit: options?.limit || 1000,
-          page: options?.page || 1,
-        },
-      }),
-    });
+    const allAccounts: TokenAccount[] = [];
+    let cursor = options?.cursor;
 
-    const data = await response.json() as HeliusTokenAccountsResponse;
-    
-    return data.result.items.map((item) => ({
-      address: item.address || item.token_address || '',
-      mint: mint.toString(),
-      owner: item.owner,
-      amount: item.amount,
-      decimals: item.decimals,
-    }));
+    do {
+      const response = await fetch(this.rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'get-token-accounts',
+          method: 'getTokenAccounts',
+          params: {
+            mint: mint.toString(),
+            limit: options?.limit || 1000,
+            ...(cursor ? { cursor } : {}),
+          },
+        }),
+      });
+
+      const data = await response.json() as HeliusTokenAccountsResponse;
+
+      for (const item of data.result.token_accounts) {
+        allAccounts.push({
+          address: item.address,
+          mint: mint.toString(),
+          owner: item.owner,
+          amount: item.amount,
+          decimals: item.decimals,
+        });
+      }
+
+      cursor = data.result.cursor;
+    } while (cursor);
+
+    return allAccounts;
   }
 
   /**
