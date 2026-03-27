@@ -7,6 +7,8 @@
  */
 
 import { Connection, PublicKey, Transaction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
+import { CpAmm } from '@meteora-ag/cp-amm-sdk';
+import pino from 'pino';
 import BN from 'bn.js';
 import type {
   PoolState,
@@ -44,20 +46,54 @@ export interface PoolInfo {
 }
 
 /**
+ * Error class for Meteora SDK operations with context
+ */
+export class MeteoraClientError extends Error {
+  constructor(
+    public readonly operation: string,
+    public readonly originalError: unknown,
+    public readonly params?: Record<string, unknown>
+  ) {
+    const originalMessage = originalError instanceof Error ? originalError.message : String(originalError);
+    super(`${operation} failed: ${originalMessage}`);
+    this.name = 'MeteoraClientError';
+  }
+}
+
+/**
+ * Logger configuration
+ */
+export interface LoggerConfig {
+  level?: string;
+  prettyPrint?: boolean;
+}
+
+/**
  * Meteora DAMM v2 Client
  * 
  * This client wraps the @meteora-ag/cp-amm-sdk functionality.
- * For production, install the actual SDK: npm install @meteora-ag/cp-amm-sdk
- * 
- * This implementation provides the interface and types for the SDK methods.
  */
 export class MeteoraClient {
   private readonly connection: Connection;
   private readonly programId: PublicKey;
+  private readonly cpAmm: CpAmm;
+  private readonly logger: pino.Logger;
 
-  constructor(connection: Connection, programId?: PublicKey) {
+  constructor(connection: Connection, programId?: PublicKey, loggerConfig?: LoggerConfig) {
     this.connection = connection;
     this.programId = programId || DAMM_V2_PROGRAM_ID;
+    
+    // Initialize the CpAmm SDK
+    this.cpAmm = new CpAmm(connection);
+    
+    // Initialize structured logger
+    this.logger = pino({
+      level: loggerConfig?.level || 'info',
+      transport: loggerConfig?.prettyPrint !== false ? {
+        target: 'pino-pretty',
+        options: { colorize: true }
+      } : undefined,
+    });
   }
 
   /**
@@ -83,65 +119,113 @@ export class MeteoraClient {
    * Returns array of pool public keys with their state
    */
   async getAllPools(): Promise<PoolInfo[]> {
-    // In production, use the actual SDK:
-    // const cpAmm = new CpAmm(this.connection);
-    // return cpAmm.getAllPools();
-
-    // Placeholder implementation - filter by program ID
-    const accounts = await this.connection.getProgramAccounts(this.programId, {
-      filters: [
-        {
-          dataSize: 324, // Approximate pool state size
-        },
-      ],
-    });
-
-    return accounts.map((acc) => ({
-      publicKey: acc.pubkey,
-      account: this.parsePoolState(acc.account.data),
-    }));
+    const operation = 'getAllPools';
+    this.logger.info({ operation }, 'Fetching all pools');
+    
+    try {
+      const pools = await this.cpAmm.getAllPools();
+      
+      this.logger.info({
+        operation,
+        poolCount: pools.length,
+      }, 'Successfully fetched pools');
+      
+      return pools.map((pool) => ({
+        publicKey: pool.publicKey,
+        account: pool.account as unknown as PoolState,
+      }));
+    } catch (error) {
+      this.logger.error({
+        operation,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to fetch pools');
+      
+      throw new MeteoraClientError(operation, error);
+    }
   }
 
   /**
    * Find pools for a specific token pair
    */
   async findPoolsForPair(tokenAMint: PublicKey, tokenBMint: PublicKey): Promise<PoolInfo[]> {
-    const allPools = await this.getAllPools();
+    const operation = 'findPoolsForPair';
+    const params = {
+      tokenAMint: tokenAMint.toString(),
+      tokenBMint: tokenBMint.toString(),
+    };
     
-    return allPools.filter((pool) => {
-      const poolA = pool.account.tokenAMint.toString();
-      const poolB = pool.account.tokenBMint.toString();
-      return (
-        (poolA === tokenAMint.toString() && poolB === tokenBMint.toString()) ||
-        (poolA === tokenBMint.toString() && poolB === tokenAMint.toString())
-      );
-    });
+    this.logger.info({
+      operation,
+      tokenAMint: params.tokenAMint,
+      tokenBMint: params.tokenBMint,
+    }, 'Finding pools for token pair');
+    
+    try {
+      const allPools = await this.getAllPools();
+      
+      const matchingPools = allPools.filter((pool) => {
+        const poolA = pool.account.tokenAMint.toString();
+        const poolB = pool.account.tokenBMint.toString();
+        return (
+          (poolA === params.tokenAMint && poolB === params.tokenBMint) ||
+          (poolA === params.tokenBMint && poolB === params.tokenAMint)
+        );
+      });
+      
+      this.logger.info({
+        operation,
+        tokenAMint: params.tokenAMint,
+        tokenBMint: params.tokenBMint,
+        matchingPoolCount: matchingPools.length,
+      }, 'Found matching pools');
+      
+      return matchingPools;
+    } catch (error) {
+      this.logger.error({
+        operation,
+        tokenAMint: params.tokenAMint,
+        tokenBMint: params.tokenBMint,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to find pools for pair');
+      
+      throw new MeteoraClientError(operation, error, params);
+    }
   }
 
   /**
    * Fetch pool state by public key
    */
   async fetchPoolState(poolAddress: PublicKey): Promise<PoolState> {
-    // In production, use the actual SDK:
-    // const cpAmm = new CpAmm(this.connection);
-    // return cpAmm.fetchPoolState(poolAddress);
-
-    const accountInfo = await this.connection.getAccountInfo(poolAddress);
-    if (!accountInfo) {
-      throw new Error(`Pool not found: ${poolAddress.toString()}`);
+    const operation = 'fetchPoolState';
+    const params = { poolAddress: poolAddress.toString() };
+    
+    this.logger.info({
+      operation,
+      poolAddress: params.poolAddress,
+    }, 'Fetching pool state');
+    
+    try {
+      const poolState = await this.cpAmm.fetchPoolState(poolAddress);
+      
+      this.logger.info({
+        operation,
+        poolAddress: params.poolAddress,
+        tokenAMint: poolState.tokenAMint.toString(),
+        tokenBMint: poolState.tokenBMint.toString(),
+        liquidity: poolState.liquidity.toString(),
+        sqrtPrice: poolState.sqrtPrice.toString(),
+      }, 'Successfully fetched pool state');
+      
+      return poolState as unknown as PoolState;
+    } catch (error) {
+      this.logger.error({
+        operation,
+        poolAddress: params.poolAddress,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to fetch pool state');
+      
+      throw new MeteoraClientError(operation, error, params);
     }
-
-    return this.parsePoolState(accountInfo.data);
-  }
-
-  /**
-   * Parse raw account data into PoolState
-   * This is a simplified parser - use SDK for production
-   */
-  private parsePoolState(data: Buffer): PoolState {
-    // In production, use the SDK's built-in deserialization
-    // This is a placeholder that returns minimal data
-    throw new Error('Use @meteora-ag/cp-amm-sdk for proper pool state parsing');
   }
 
   // ============================================
@@ -152,16 +236,37 @@ export class MeteoraClient {
    * Fetch position state by public key
    */
   async fetchPositionState(positionAddress: PublicKey): Promise<PositionState> {
-    // In production, use the actual SDK:
-    // const cpAmm = new CpAmm(this.connection);
-    // return cpAmm.fetchPositionState(positionAddress);
-
-    const accountInfo = await this.connection.getAccountInfo(positionAddress);
-    if (!accountInfo) {
-      throw new Error(`Position not found: ${positionAddress.toString()}`);
+    const operation = 'fetchPositionState';
+    const params = { positionAddress: positionAddress.toString() };
+    
+    this.logger.info({
+      operation,
+      positionAddress: params.positionAddress,
+    }, 'Fetching position state');
+    
+    try {
+      const positionState = await this.cpAmm.fetchPositionState(positionAddress);
+      
+      this.logger.info({
+        operation,
+        positionAddress: params.positionAddress,
+        pool: positionState.pool.toString(),
+        owner: positionState.owner.toString(),
+        liquidity: positionState.liquidity.toString(),
+        unlockedLiquidity: positionState.unlockedLiquidity.toString(),
+        permanentLockedLiquidity: positionState.permanentLockedLiquidity.toString(),
+      }, 'Successfully fetched position state');
+      
+      return positionState as unknown as PositionState;
+    } catch (error) {
+      this.logger.error({
+        operation,
+        positionAddress: params.positionAddress,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to fetch position state');
+      
+      throw new MeteoraClientError(operation, error, params);
     }
-
-    return this.parsePositionState(accountInfo.data);
   }
 
   /**
@@ -171,46 +276,83 @@ export class MeteoraClient {
     publicKey: PublicKey;
     account: PositionState;
   }>> {
-    // In production, use the actual SDK:
-    // const cpAmm = new CpAmm(this.connection);
-    // return cpAmm.getAllPositionsByPool(pool);
-
-    const accounts = await this.connection.getProgramAccounts(this.programId, {
-      filters: [
-        {
-          dataSize: 208, // Approximate position state size
-        },
-        // Additional filtering by pool would go here
-      ],
-    });
-
-    return accounts.map((acc) => ({
-      publicKey: acc.pubkey,
-      account: this.parsePositionState(acc.account.data),
-    }));
+    const operation = 'getAllPositionsByPool';
+    const params = { pool: pool.toString() };
+    
+    this.logger.info({
+      operation,
+      pool: params.pool,
+    }, 'Fetching all positions for pool');
+    
+    try {
+      const positions = await this.cpAmm.getAllPositionsByPool(pool);
+      
+      this.logger.info({
+        operation,
+        pool: params.pool,
+        positionCount: positions.length,
+      }, 'Successfully fetched positions for pool');
+      
+      return positions.map((pos) => ({
+        publicKey: pos.publicKey,
+        account: pos.account as unknown as PositionState,
+      }));
+    } catch (error) {
+      this.logger.error({
+        operation,
+        pool: params.pool,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to fetch positions for pool');
+      
+      throw new MeteoraClientError(operation, error, params);
+    }
   }
 
   /**
    * Get user's positions for a specific pool
    */
-  async getUserPositionByPool(pool: PublicKey, owner: PublicKey): Promise<PositionState | null> {
-    // In production, use the actual SDK:
-    // const cpAmm = new CpAmm(this.connection);
-    // return cpAmm.getUserPositionByPool(pool, owner);
-
-    const positions = await this.getAllPositionsByPool(pool);
-    const userPosition = positions.find(
-      (p) => p.account.owner.toString() === owner.toString()
-    );
-    return userPosition?.account || null;
-  }
-
-  /**
-   * Parse raw account data into PositionState
-   */
-  private parsePositionState(data: Buffer): PositionState {
-    // In production, use the SDK's built-in deserialization
-    throw new Error('Use @meteora-ag/cp-amm-sdk for proper position state parsing');
+  async getUserPositionByPool(pool: PublicKey, owner: PublicKey): Promise<Array<{
+    positionNftAccount: PublicKey;
+    position: PublicKey;
+    positionState: PositionState;
+  }> | null> {
+    const operation = 'getUserPositionByPool';
+    const params = {
+      pool: pool.toString(),
+      owner: owner.toString(),
+    };
+    
+    this.logger.info({
+      operation,
+      pool: params.pool,
+      owner: params.owner,
+    }, 'Fetching user position for pool');
+    
+    try {
+      const positions = await this.cpAmm.getUserPositionByPool(pool, owner);
+      
+      this.logger.info({
+        operation,
+        pool: params.pool,
+        owner: params.owner,
+        positionCount: positions.length,
+      }, 'Successfully fetched user positions for pool');
+      
+      return positions.map((pos) => ({
+        positionNftAccount: pos.positionNftAccount,
+        position: pos.position,
+        positionState: pos.positionState as unknown as PositionState,
+      }));
+    } catch (error) {
+      this.logger.error({
+        operation,
+        pool: params.pool,
+        owner: params.owner,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to fetch user position for pool');
+      
+      throw new MeteoraClientError(operation, error, params);
+    }
   }
 
   // ============================================
@@ -227,20 +369,42 @@ export class MeteoraClient {
     minSqrtPrice: BN;
     maxSqrtPrice: BN;
     sqrtPrice: BN;
+    collectFeeMode: number;
+    tokenAAmount: BN;
+    tokenBAmount: BN;
+    liquidity: BN;
   }): Promise<DepositQuote> {
-    // In production, use the actual SDK:
-    // const cpAmm = new CpAmm(this.connection);
-    // return cpAmm.getDepositQuote(params);
-
-    // Simplified calculation for documentation purposes
-    // The actual SDK handles complex math for concentrated liquidity
-    const liquidityDelta = params.inAmount;
-    const outputAmount = params.inAmount; // Simplified - actual ratio depends on price
-
-    return {
-      liquidityDelta,
-      outputAmount,
+    const operation = 'getDepositQuote';
+    const logParams = {
+      inAmount: params.inAmount.toString(),
+      isTokenA: params.isTokenA,
     };
+    
+    this.logger.info({
+      operation,
+      ...logParams,
+    }, 'Calculating deposit quote');
+    
+    try {
+      const quote = await this.cpAmm.getDepositQuote(params);
+      
+      this.logger.info({
+        operation,
+        ...logParams,
+        liquidityDelta: quote.liquidityDelta.toString(),
+        outputAmount: quote.outputAmount.toString(),
+      }, 'Successfully calculated deposit quote');
+      
+      return quote as DepositQuote;
+    } catch (error) {
+      this.logger.error({
+        operation,
+        ...logParams,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to calculate deposit quote');
+      
+      throw new MeteoraClientError(operation, error, logParams);
+    }
   }
 
   /**
@@ -253,22 +417,90 @@ export class MeteoraClient {
     pool: PublicKey;
     positionNft: PublicKey;
   }): Promise<TxBuilder> {
-    // In production, use the actual SDK:
-    // const cpAmm = new CpAmm(this.connection);
-    // return cpAmm.createPosition(params);
-
-    throw new Error('Use @meteora-ag/cp-amm-sdk for createPosition');
+    const operation = 'createPosition';
+    const logParams = {
+      owner: params.owner.toString(),
+      payer: params.payer.toString(),
+      pool: params.pool.toString(),
+      positionNft: params.positionNft.toString(),
+    };
+    
+    this.logger.info({
+      operation,
+      ...logParams,
+    }, 'Creating position');
+    
+    try {
+      const txBuilder = await this.cpAmm.createPosition(params);
+      
+      this.logger.info({
+        operation,
+        ...logParams,
+      }, 'Successfully created position transaction builder');
+      
+      return txBuilder as TxBuilder;
+    } catch (error) {
+      this.logger.error({
+        operation,
+        ...logParams,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to create position');
+      
+      throw new MeteoraClientError(operation, error, logParams);
+    }
   }
 
   /**
    * Add liquidity to an existing position
    */
   async addLiquidity(params: AddLiquidityParams): Promise<TxBuilder> {
-    // In production, use the actual SDK:
-    // const cpAmm = new CpAmm(this.connection);
-    // return cpAmm.addLiquidity(params);
-
-    throw new Error('Use @meteora-ag/cp-amm-sdk for addLiquidity');
+    const operation = 'addLiquidity';
+    const logParams = {
+      owner: params.owner.toString(),
+      pool: params.pool.toString(),
+      position: params.position.toString(),
+      liquidityDelta: params.liquidityDelta.toString(),
+    };
+    
+    this.logger.info({
+      operation,
+      ...logParams,
+    }, 'Adding liquidity');
+    
+    try {
+      const txBuilder = await this.cpAmm.addLiquidity({
+        owner: params.owner,
+        pool: params.pool,
+        position: params.position,
+        positionNftAccount: params.positionNftAccount,
+        liquidityDelta: params.liquidityDelta,
+        maxAmountTokenA: params.maxAmountTokenA,
+        maxAmountTokenB: params.maxAmountTokenB,
+        tokenAAmountThreshold: params.tokenAAmountThreshold,
+        tokenBAmountThreshold: params.tokenBAmountThreshold,
+        tokenAMint: params.tokenAMint,
+        tokenBMint: params.tokenBMint,
+        tokenAVault: params.tokenAVault,
+        tokenBVault: params.tokenBVault,
+        tokenAProgram: params.tokenAProgram,
+        tokenBProgram: params.tokenBProgram,
+      });
+      
+      this.logger.info({
+        operation,
+        ...logParams,
+      }, 'Successfully created add liquidity transaction builder');
+      
+      return txBuilder as TxBuilder;
+    } catch (error) {
+      this.logger.error({
+        operation,
+        ...logParams,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to add liquidity');
+      
+      throw new MeteoraClientError(operation, error, logParams);
+    }
   }
 
   // ============================================
@@ -282,22 +514,182 @@ export class MeteoraClient {
    * The liquidity can never be withdrawn, but fees can still be claimed
    */
   async permanentLockPosition(params: PermanentLockParams): Promise<TxBuilder> {
-    // In production, use the actual SDK:
-    // const cpAmm = new CpAmm(this.connection);
-    // return cpAmm.permanentLockPosition(params);
-
-    throw new Error('Use @meteora-ag/cp-amm-sdk for permanentLockPosition');
+    const operation = 'permanentLockPosition';
+    const logParams = {
+      owner: params.owner.toString(),
+      position: params.position.toString(),
+      pool: params.pool.toString(),
+      unlockedLiquidity: params.unlockedLiquidity.toString(),
+    };
+    
+    this.logger.info({
+      operation,
+      ...logParams,
+    }, 'Creating permanent lock position transaction');
+    
+    try {
+      const txBuilder = await this.cpAmm.permanentLockPosition({
+        owner: params.owner,
+        position: params.position,
+        positionNftAccount: params.positionNftAccount,
+        pool: params.pool,
+        unlockedLiquidity: params.unlockedLiquidity,
+      });
+      
+      this.logger.info({
+        operation,
+        ...logParams,
+      }, 'Successfully created permanent lock transaction builder');
+      
+      return txBuilder as TxBuilder;
+    } catch (error) {
+      this.logger.error({
+        operation,
+        ...logParams,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to create permanent lock transaction');
+      
+      throw new MeteoraClientError(operation, error, logParams);
+    }
   }
 
   /**
    * Claim fees from a position (works on locked positions too)
+   * 
+   * Validates:
+   * - Position exists and belongs to the specified pool
+   * - Receiver address is provided
+   * - Token accounts are valid public keys
    */
   async claimPositionFee(params: ClaimPositionFeeParams): Promise<TxBuilder> {
-    // In production, use the actual SDK:
-    // const cpAmm = new CpAmm(this.connection);
-    // return cpAmm.claimPositionFee2(params);
-
-    throw new Error('Use @meteora-ag/cp-amm-sdk for claimPositionFee');
+    const operation = 'claimPositionFee';
+    const logParams = {
+      owner: params.owner.toString(),
+      pool: params.pool.toString(),
+      position: params.position.toString(),
+      receiver: params.receiver.toString(),
+    };
+    
+    this.logger.info({
+      operation,
+      ...logParams,
+    }, 'Creating claim fee transaction');
+    
+    // Validation: Verify receiver is provided
+    if (!params.receiver) {
+      this.logger.error({
+        operation,
+        ...logParams,
+      }, 'Receiver address is required');
+      
+      throw new MeteoraClientError(operation, new Error('Receiver address is required'), logParams);
+    }
+    
+    // Validation: Verify token accounts are valid public keys (not default/zero addresses)
+    const zeroAddress = '11111111111111111111111111111111';
+    if (params.tokenAVault.toString() === zeroAddress || 
+        params.tokenBVault.toString() === zeroAddress) {
+      this.logger.error({
+        operation,
+        ...logParams,
+      }, 'Invalid token vault address');
+      
+      throw new MeteoraClientError(operation, new Error('Invalid token vault address'), logParams);
+    }
+    
+    if (params.tokenAMint.toString() === zeroAddress || 
+        params.tokenBMint.toString() === zeroAddress) {
+      this.logger.error({
+        operation,
+        ...logParams,
+      }, 'Invalid token mint address');
+      
+      throw new MeteoraClientError(operation, new Error('Invalid token mint address'), logParams);
+    }
+    
+    try {
+      // Validation: Verify position exists by fetching its state
+      let positionState: PositionState;
+      try {
+        positionState = await this.fetchPositionState(params.position);
+      } catch (fetchError) {
+        this.logger.error({
+          operation,
+          position: params.position.toString(),
+          error: fetchError instanceof Error ? fetchError.message : String(fetchError),
+        }, 'Position does not exist or is inaccessible');
+        
+        throw new MeteoraClientError(operation, new Error('Position does not exist or is inaccessible'), logParams);
+      }
+      
+      // Validation: Verify position belongs to the specified pool
+      if (positionState.pool.toString() !== params.pool.toString()) {
+        this.logger.error({
+          operation,
+          position: params.position.toString(),
+          expectedPool: params.pool.toString(),
+          actualPool: positionState.pool.toString(),
+        }, 'Position belongs to a different pool');
+        
+        throw new MeteoraClientError(
+          operation, 
+          new Error(`Position belongs to pool ${positionState.pool.toString()}, not ${params.pool.toString()}`),
+          logParams
+        );
+      }
+      
+      // Validation: Verify owner matches
+      if (positionState.owner.toString() !== params.owner.toString()) {
+        this.logger.error({
+          operation,
+          position: params.position.toString(),
+          expectedOwner: params.owner.toString(),
+          actualOwner: positionState.owner.toString(),
+        }, 'Position owner mismatch');
+        
+        throw new MeteoraClientError(
+          operation,
+          new Error('Position owner does not match the provided owner address'),
+          logParams
+        );
+      }
+      
+      const txBuilder = await this.cpAmm.claimPositionFee2({
+        owner: params.owner,
+        pool: params.pool,
+        position: params.position,
+        positionNftAccount: params.positionNftAccount,
+        tokenAVault: params.tokenAVault,
+        tokenBVault: params.tokenBVault,
+        tokenAMint: params.tokenAMint,
+        tokenBMint: params.tokenBMint,
+        tokenAProgram: params.tokenAProgram,
+        tokenBProgram: params.tokenBProgram,
+        receiver: params.receiver,
+      });
+      
+      this.logger.info({
+        operation,
+        ...logParams,
+        tokenAFees: positionState.tokenAFees.toString(),
+        tokenBFees: positionState.tokenBFees.toString(),
+      }, 'Successfully created claim fee transaction builder');
+      
+      return txBuilder as TxBuilder;
+    } catch (error) {
+      // Re-throw MeteoraClientError as-is
+      if (error instanceof MeteoraClientError) {
+        throw error;
+      }
+      
+      this.logger.error({
+        operation,
+        ...logParams,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to create claim fee transaction');
+      
+      throw new MeteoraClientError(operation, error, logParams);
+    }
   }
 
   // ============================================
@@ -319,16 +711,80 @@ export class MeteoraClient {
     sqrtMinPrice?: BN;
     sqrtMaxPrice?: BN;
     initSqrtPrice?: BN;
+    liquidityDelta?: BN;
     baseFeeNumerator?: number;
     hasAlphaVault?: boolean;
     isLockLiquidity?: boolean;
+    collectFeeMode?: number;
+    activationPoint?: BN | null;
+    activationType?: number;
+    tokenAProgram?: PublicKey;
+    tokenBProgram?: PublicKey;
   }): Promise<{ tx: Transaction; pool: PublicKey; position: PublicKey }> {
-    // In production, use the actual SDK:
-    // const cpAmm = new CpAmm(this.connection);
-    // const poolFees = { baseFee: { ... } };
-    // return cpAmm.createCustomPool({ ...params, poolFees });
-
-    throw new Error('Use @meteora-ag/cp-amm-sdk for createCustomPool');
+    const operation = 'createCustomPool';
+    const logParams = {
+      payer: params.payer.toString(),
+      creator: params.creator.toString(),
+      tokenAMint: params.tokenAMint.toString(),
+      tokenBMint: params.tokenBMint.toString(),
+    };
+    
+    this.logger.info({
+      operation,
+      ...logParams,
+    }, 'Creating custom pool');
+    
+    try {
+      const result = await this.cpAmm.createCustomPool({
+        payer: params.payer,
+        creator: params.creator,
+        positionNft: params.positionNft,
+        tokenAMint: params.tokenAMint,
+        tokenBMint: params.tokenBMint,
+        tokenAAmount: params.tokenAAmount,
+        tokenBAmount: params.tokenBAmount,
+        sqrtMinPrice: params.sqrtMinPrice || MIN_SQRT_PRICE,
+        sqrtMaxPrice: params.sqrtMaxPrice || MAX_SQRT_PRICE,
+        initSqrtPrice: params.initSqrtPrice || new BN(0),
+        liquidityDelta: params.liquidityDelta || new BN(0),
+        poolFees: {
+          baseFee: {
+            cliffFeeNumerator: new BN(params.baseFeeNumerator || 1000000),
+            numberOfPeriod: 1,
+            reductionFactor: new BN(1),
+            periodFrequency: 1,
+            feeSchedulerMode: 0,
+          },
+          compoundingFeeBps: 0,
+          padding: 0,
+          dynamicFee: null,
+        },
+        hasAlphaVault: params.hasAlphaVault || false,
+        collectFeeMode: params.collectFeeMode || 0,
+        activationPoint: params.activationPoint || null,
+        activationType: params.activationType || 0,
+        tokenAProgram: params.tokenAProgram || new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+        tokenBProgram: params.tokenBProgram || new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+        isLockLiquidity: params.isLockLiquidity || false,
+      });
+      
+      this.logger.info({
+        operation,
+        ...logParams,
+        pool: result.pool.toString(),
+        position: result.position.toString(),
+      }, 'Successfully created custom pool');
+      
+      return result;
+    } catch (error) {
+      this.logger.error({
+        operation,
+        ...logParams,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to create custom pool');
+      
+      throw new MeteoraClientError(operation, error, logParams);
+    }
   }
 
   // ============================================
@@ -370,6 +826,10 @@ export class MeteoraClient {
 /**
  * Create a Meteora client from a Solana connection
  */
-export function createMeteoraClient(connection: Connection): MeteoraClient {
-  return new MeteoraClient(connection);
+export function createMeteoraClient(
+  connection: Connection,
+  programId?: PublicKey,
+  loggerConfig?: LoggerConfig
+): MeteoraClient {
+  return new MeteoraClient(connection, programId, loggerConfig);
 }
