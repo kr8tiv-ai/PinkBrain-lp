@@ -1,0 +1,29 @@
+{
+  "name": "pinkbrain-lp",
+  "version": "0.1.0",
+  "description": "Fee-compounding liquidity management app for Bags.fm ecosystem",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "backend": "npm run dev -w backend",
+    "frontend": "npm run dev -w frontend",
+    "build": "npm run build -ws",
+    "test": "npm run test -ws",
+    "lint": "npm run lint -ws"
+  },
+  "keywords": [
+    "solana",
+    "meteora",
+    "bags",
+    "defi",
+    "liquidity"
+  ],
+  "author": "KR8TIV AI",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

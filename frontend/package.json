@@ -1,0 +1,10 @@
+{
+  "name": "@pinkbrain-lp/frontend",
+  "version": "0.1.0",
+  "description": "PinkBrain LP Frontend - Bags App Store UI",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"Frontend not yet implemented - Phase 3\"",
+    "build": "echo \"Frontend not yet implemented - Phase 3\""
+  }
+}
