@@ -12,7 +12,10 @@
     "frontend": "npm run dev -w frontend",
     "build": "npm run build -ws",
     "test": "npm run test -ws",
-    "lint": "npm run lint -ws"
+    "lint": "npm run lint -ws",
+    "verify:backend": "npm exec -- tsc -p backend/tsconfig.json && npm exec --workspace backend -- vitest run",
+    "verify:frontend": "npm exec --workspace frontend -- tsc -b && npm exec --workspace frontend -- vite build",
+    "verify": "npm run verify:backend && npm run verify:frontend"
   },
   "keywords": [
     "solana",

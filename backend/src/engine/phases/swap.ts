@@ -38,9 +38,11 @@ export async function executeSwapPhase(ctx: PhaseContext): Promise<SwapPhaseResu
     outputMint: strategy.targetTokenA,
     amount: halfAmount,
     slippageBps: strategy.swapConfig.slippageBps,
-  });
+  }, { priority: 'high' });
 
-  const swapTxA = await bagsClient.createSwapTransaction(quoteA, wallet);
+  const swapTxA = await bagsClient.createSwapTransaction(quoteA, wallet, {
+    priority: 'high',
+  });
   const resultA = await sender.signAndSendTransaction(swapTxA.swapTransaction);
   txSignatures.push(resultA.signature);
 
@@ -50,9 +52,11 @@ export async function executeSwapPhase(ctx: PhaseContext): Promise<SwapPhaseResu
     outputMint: strategy.targetTokenB,
     amount: halfAmount,
     slippageBps: strategy.swapConfig.slippageBps,
-  });
+  }, { priority: 'high' });
 
-  const swapTxB = await bagsClient.createSwapTransaction(quoteB, wallet);
+  const swapTxB = await bagsClient.createSwapTransaction(quoteB, wallet, {
+    priority: 'high',
+  });
   const resultB = await sender.signAndSendTransaction(swapTxB.swapTransaction);
   txSignatures.push(resultB.signature);
 

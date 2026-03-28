@@ -2,6 +2,7 @@
  * PinkBrain LP Type Definitions
  */
 
+import type { Connection } from '@solana/web3.js';
 import { PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 
@@ -12,6 +13,7 @@ import BN from 'bn.js';
 export interface BagsApiConfig {
   apiKey: string;
   baseUrl: string;
+  connection?: Connection;
 }
 
 export interface BagsRateLimitInfo {

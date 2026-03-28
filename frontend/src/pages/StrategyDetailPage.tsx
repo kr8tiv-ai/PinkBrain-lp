@@ -1,7 +1,8 @@
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Play, Pause, ExternalLink, RotateCw } from 'lucide-react';
+import { ArrowLeft, Play, Pause, ExternalLink, RotateCw, AlertTriangle, FlaskConical, Shield } from 'lucide-react';
 import { useStrategy, usePauseStrategy, useResumeStrategy, useTriggerRun } from '../api/strategies';
 import { useRuns, useRunLogs } from '../api/runs';
+import { useHealth } from '../api/health';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
@@ -32,22 +33,24 @@ export function StrategyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: strategy, isLoading: loadingStrategy } = useStrategy(id ?? '');
   const { data: runs, isLoading: loadingRuns } = useRuns(id ?? '');
+  const { data: health } = useHealth();
   const pauseMut = usePauseStrategy();
   const resumeMut = useResumeStrategy();
   const triggerMut = useTriggerRun();
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
+
+  const executionBlocked = health?.runtime.executionMode === 'blocked';
+  const runButtonLabel = health?.runtime.executionMode === 'dry-run' ? 'Run Dry Run' : 'Run Now';
 
   if (loadingStrategy) return <div className="text-gray-500">Loading...</div>;
   if (!strategy) return <div className="text-gray-500">Strategy not found</div>;
 
   return (
     <div className="space-y-6">
-      {/* Back link */}
       <Link to="/" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-200">
         <ArrowLeft className="w-4 h-4" /> Back to Dashboard
       </Link>
 
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
@@ -81,15 +84,61 @@ export function StrategyDetailPage() {
           <Button
             size="sm"
             onClick={() => triggerMut.mutate(strategy.strategyId)}
-            disabled={triggerMut.isPending}
+            disabled={triggerMut.isPending || executionBlocked}
           >
             <RotateCw className={`w-3.5 h-3.5 ${triggerMut.isPending ? 'animate-spin' : ''}`} />
-            Run Now
+            {runButtonLabel}
           </Button>
         </div>
       </div>
 
-      {/* Config */}
+      {health && (
+        <Card className={health.status === 'degraded' ? 'border-orange-500/30 bg-orange-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                {health.status === 'degraded' ? (
+                  <AlertTriangle className="w-4 h-4 text-orange-300" />
+                ) : (
+                  <Shield className="w-4 h-4 text-emerald-300" />
+                )}
+                Runtime Status
+              </h3>
+              <p className="mt-1 text-xs text-gray-300">
+                {health.runtime.executionMode === 'dry-run' && 'Manual runs are currently safe simulations only; no live transactions will be sent.'}
+                {health.runtime.executionMode === 'blocked' && 'The backend kill switch is enabled, so manual execution is intentionally disabled.'}
+                {health.runtime.executionMode === 'live' && 'The backend is configured for live execution.'}
+              </p>
+              {health.dependencies.signer.status === 'missing' && (
+                <p className="mt-2 text-xs text-orange-200/80">
+                  Live signer configuration is missing. Keep the backend in dry-run mode until a signing path is available.
+                </p>
+              )}
+            </div>
+            <div className="grid gap-2 text-xs sm:grid-cols-2 lg:min-w-[24rem]">
+              <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+                <div className="flex items-center gap-2 font-medium text-white">
+                  <FlaskConical className="w-3.5 h-3.5 text-pink-300" />
+                  Execution
+                </div>
+                <p className="mt-1 text-gray-300">
+                  {health.runtime.executionMode}
+                </p>
+              </div>
+              <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+                <div className="flex items-center gap-2 font-medium text-white">
+                  <Shield className="w-3.5 h-3.5 text-pink-300" />
+                  Controls
+                </div>
+                <p className="mt-1 text-gray-300">
+                  {health.runtime.apiAuthProtected ? 'API protected' : 'API open'} · signer {health.dependencies.signer.status}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <h3 className="text-sm font-medium text-gray-400 mb-3">Configuration</h3>
@@ -158,13 +207,12 @@ export function StrategyDetailPage() {
         </Card>
       </div>
 
-      {/* Run History */}
       <div>
         <h3 className="text-sm font-medium text-gray-400 mb-3">Run History</h3>
         {loadingRuns && <div className="text-gray-500 text-sm">Loading runs...</div>}
         {runs && runs.length === 0 && (
           <Card className="text-center py-8 text-gray-500 text-sm">
-            No runs yet. Click "Run Now" to trigger a compounding cycle.
+            No runs yet. Click "{runButtonLabel}" to trigger a compounding cycle.
           </Card>
         )}
         {runs && runs.length > 0 && (

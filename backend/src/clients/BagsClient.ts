@@ -3,6 +3,8 @@
  * Handles authentication, rate limiting, and the Bags API endpoints used by PinkBrain.
  */
 
+import { BagsSDK } from '@bagsfm/bags-sdk';
+import type { Connection } from '@solana/web3.js';
 import type {
   BagsApiConfig,
   BagsRateLimitInfo,
@@ -12,6 +14,14 @@ import type {
   ClaimTransaction,
   PartnerClaimTransaction,
 } from '../types/index.js';
+import type { BagsAdapter, BagsRequestOptions, BagsRequestPriority } from './BagsAdapter.js';
+import {
+  parseClaimTransactions,
+  parseClaimablePositions,
+  parsePartnerClaimTransaction,
+  parseSwapTransaction,
+  parseTradeQuote,
+} from './bags-schemas.js';
 
 type QueryValue = string | number | boolean;
 
@@ -54,8 +64,9 @@ function extractErrorMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
-export class BagsClient {
+export class BagsClient implements BagsAdapter {
   private readonly config: BagsApiConfig;
+  private readonly sdk: BagsSDK | null;
   private rateLimitInfo: BagsRateLimitInfo = {
     remaining: 1000,
     resetAt: 0,
@@ -63,6 +74,7 @@ export class BagsClient {
 
   constructor(config: BagsApiConfig) {
     this.config = config;
+    this.sdk = config.connection ? new BagsSDK(config.apiKey, config.connection, 'confirmed') : null;
   }
 
   private getBaseUrl(): string {
@@ -84,8 +96,9 @@ export class BagsClient {
     endpoint: string;
     query?: Record<string, QueryValue>;
     body?: unknown;
+    priority?: BagsRequestPriority;
   }): Promise<T> {
-    await this.waitForRateLimit();
+    await this.waitForRateLimit(params.priority ?? 'low');
 
     const response = await fetch(this.buildUrl(params.endpoint, params.query), {
       method: params.method,
@@ -127,8 +140,10 @@ export class BagsClient {
     }
   }
 
-  private async waitForRateLimit(): Promise<void> {
-    if (this.rateLimitInfo.remaining <= 100) {
+  private async waitForRateLimit(priority: BagsRequestPriority): Promise<void> {
+    const reserveFloor = priority === 'high' ? 0 : 100;
+
+    if (this.rateLimitInfo.remaining <= reserveFloor) {
       const now = Math.floor(Date.now() / 1000);
       if (this.rateLimitInfo.resetAt > now) {
         const waitTime = (this.rateLimitInfo.resetAt - now) * 1000;
@@ -138,13 +153,18 @@ export class BagsClient {
     }
   }
 
-  async getClaimablePositions(wallet: string): Promise<ClaimablePosition[]> {
+  async getClaimablePositions(
+    wallet: string,
+    options: BagsRequestOptions = {},
+  ): Promise<ClaimablePosition[]> {
     try {
-      return await this.request<ClaimablePosition[]>({
+      const payload = await this.request<unknown>({
         method: 'GET',
         endpoint: '/token-launch/claimable-positions',
         query: { wallet },
+        priority: options.priority ?? 'low',
       });
+      return parseClaimablePositions(payload);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to get claimable positions: ${message}`);
@@ -154,8 +174,9 @@ export class BagsClient {
   async getClaimTransactions(
     feeClaimer: string,
     position: ClaimablePosition,
+    options: BagsRequestOptions = {},
   ): Promise<ClaimTransaction[]> {
-    return this.request<ClaimTransaction[]>({
+    const payload = await this.request<unknown>({
       method: 'POST',
       endpoint: '/token-launch/claim-txs/v2',
       body: {
@@ -179,15 +200,24 @@ export class BagsClient {
         customFeeVaultClaimerB: position.customFeeVaultClaimerB ?? null,
         customFeeVaultClaimerSide: position.customFeeVaultClaimerSide ?? null,
       },
+      priority: options.priority ?? 'high',
     });
+
+    return parseClaimTransactions(payload);
   }
 
-  async getPartnerClaimTransactions(partnerWallet: string): Promise<PartnerClaimTransaction> {
-    return this.request<PartnerClaimTransaction>({
+  async getPartnerClaimTransactions(
+    partnerWallet: string,
+    options: BagsRequestOptions = {},
+  ): Promise<PartnerClaimTransaction> {
+    const payload = await this.request<unknown>({
       method: 'POST',
       endpoint: '/fee-share/partner-config/claim-tx',
       body: { partnerWallet },
+      priority: options.priority ?? 'high',
     });
+
+    return parsePartnerClaimTransaction(payload);
   }
 
   async getTradeQuote(params: {
@@ -195,7 +225,7 @@ export class BagsClient {
     outputMint: string;
     amount: number;
     slippageBps?: number;
-  }): Promise<TradeQuote> {
+  }, options: BagsRequestOptions = {}): Promise<TradeQuote> {
     const query: Record<string, QueryValue> = {
       inputMint: params.inputMint,
       outputMint: params.outputMint,
@@ -207,22 +237,29 @@ export class BagsClient {
       query.slippageBps = params.slippageBps;
     }
 
-    return this.request<TradeQuote>({
+    const payload = await this.request<unknown>({
       method: 'GET',
       endpoint: '/trade/quote',
       query,
+      priority: options.priority ?? 'high',
     });
+
+    return parseTradeQuote(payload);
   }
 
   async createSwapTransaction(
     quoteResponse: TradeQuote,
     userPublicKey: string,
+    options: BagsRequestOptions = {},
   ): Promise<SwapTransaction> {
-    return this.request<SwapTransaction>({
+    const payload = await this.request<unknown>({
       method: 'POST',
       endpoint: '/trade/swap',
       body: { quoteResponse, userPublicKey },
+      priority: options.priority ?? 'high',
     });
+
+    return parseSwapTransaction(payload);
   }
 
   async prepareSwap(params: {
@@ -232,13 +269,13 @@ export class BagsClient {
     userPublicKey: string;
     slippageBps?: number;
     maxPriceImpactBps?: number;
-  }): Promise<{ quote: TradeQuote; swapTx: SwapTransaction }> {
+  }, options: BagsRequestOptions = {}): Promise<{ quote: TradeQuote; swapTx: SwapTransaction }> {
     const quote = await this.getTradeQuote({
       inputMint: params.inputMint,
       outputMint: params.outputMint,
       amount: params.amount,
       slippageBps: params.slippageBps,
-    });
+    }, options);
 
     const priceImpactPct = parseFloat(quote.priceImpactPct);
     const maxImpact = (params.maxPriceImpactBps || 500) / 100;
@@ -248,15 +285,15 @@ export class BagsClient {
       );
     }
 
-    const swapTx = await this.createSwapTransaction(quote, params.userPublicKey);
+    const swapTx = await this.createSwapTransaction(quote, params.userPublicKey, options);
     return { quote, swapTx };
   }
 
-  async getTotalClaimableSol(wallet: string): Promise<{
+  async getTotalClaimableSol(wallet: string, options: BagsRequestOptions = {}): Promise<{
     totalLamports: bigint;
     positions: ClaimablePosition[];
   }> {
-    const positions = await this.getClaimablePositions(wallet);
+    const positions = await this.getClaimablePositions(wallet, options);
 
     let totalLamports = BigInt(0);
     for (const position of positions) {
@@ -269,11 +306,20 @@ export class BagsClient {
   getRateLimitStatus(): BagsRateLimitInfo {
     return { ...this.rateLimitInfo };
   }
+
+  getSdk(): BagsSDK | null {
+    return this.sdk;
+  }
 }
 
-export function createBagsClient(apiKey: string, baseUrl?: string): BagsClient {
+export function createBagsClient(
+  apiKey: string,
+  baseUrl?: string,
+  connection?: Connection,
+): BagsClient {
   return new BagsClient({
     apiKey,
     baseUrl: baseUrl || 'https://public-api-v2.bags.fm/api/v1',
+    connection,
   });
 }

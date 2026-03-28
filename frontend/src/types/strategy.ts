@@ -85,8 +85,33 @@ export interface AuditEntry {
   txSignature: string | null;
 }
 
+export interface RuntimeSummary {
+  dryRun: boolean;
+  killSwitchEnabled: boolean;
+  apiAuthProtected: boolean;
+}
+
 export interface Stats {
   strategies: { total: number; active: number };
   runs: { total: number; completed: number; failed: number; successRate: number };
   scheduledJobs: number;
+  runtime: RuntimeSummary;
+}
+
+export interface HealthSnapshot {
+  status: 'ok' | 'degraded';
+  version: string;
+  timestamp: string;
+  scheduler: {
+    scheduledStrategies: number;
+  };
+  runtime: RuntimeSummary & {
+    executionMode: 'live' | 'dry-run' | 'blocked';
+  };
+  dependencies: {
+    database: { status: 'ok' | 'error' };
+    bagsApi: { status: 'configured' | 'missing'; baseUrl: string };
+    heliusRpc: { status: 'configured' | 'missing'; endpoint: string };
+    signer: { status: 'configured' | 'not-required' | 'missing' };
+  };
 }

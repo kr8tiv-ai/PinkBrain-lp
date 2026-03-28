@@ -16,9 +16,10 @@ import {
   RunStateError,
 } from '../services/errors.js';
 import { ConcurrentRunError } from '../engine/Engine.js';
+import { createLoggerOptions } from '../services/logger.js';
 
 export async function createServer(ctx: ApiContext) {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: createLoggerOptions(ctx.config) as any });
   const allowedOrigins = new Set(ctx.config.corsOrigins);
 
   await app.register(cors, {

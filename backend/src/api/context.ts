@@ -9,6 +9,7 @@ import type { Engine } from '../engine/Engine.js';
 import type { Scheduler } from '../engine/Scheduler.js';
 import type { Database } from '../services/Database.js';
 import type { Config } from '../config/index.js';
+import type { HealthService } from '../services/HealthService.js';
 
 export interface ApiContext {
   strategyService: StrategyService;
@@ -18,4 +19,5 @@ export interface ApiContext {
   scheduler: Scheduler;
   db: Database;
   config: Config;
+  healthService: HealthService;
 }

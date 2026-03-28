@@ -115,6 +115,18 @@ describe('BagsClient', () => {
         'Invalid wallet address'
       );
     });
+
+    it('should reject malformed claimable positions payloads', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([{ unexpected: true }]),
+        headers: new Headers(),
+      });
+
+      await expect(client.getClaimablePositions('test-wallet')).rejects.toThrow(
+        'Invalid Bags response'
+      );
+    });
   });
 
   describe('getTotalClaimableSol', () => {
@@ -123,8 +135,14 @@ describe('BagsClient', () => {
         ok: true,
         json: () =>
           Promise.resolve([
-            { totalClaimableLamportsUserShare: '1000000000' }, // 1 SOL
-            { totalClaimableLamportsUserShare: '500000000' }, // 0.5 SOL
+            {
+              baseMint: 'So11111111111111111111111111111111111111112',
+              totalClaimableLamportsUserShare: '1000000000',
+            }, // 1 SOL
+            {
+              baseMint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+              totalClaimableLamportsUserShare: '500000000',
+            }, // 0.5 SOL
           ]),
         headers: new Headers(),
       });
@@ -169,6 +187,75 @@ describe('BagsClient', () => {
           maxPriceImpactBps: 500, // 5% max
         })
       ).rejects.toThrow('Price impact');
+    });
+  });
+
+  describe('response normalization', () => {
+    it('should unwrap wrapped success payloads for claim transactions', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            response: [
+              {
+                tx: 'base64-transaction',
+                blockhash: {
+                  blockhash: 'abc123',
+                  lastValidBlockHeight: 123,
+                },
+              },
+            ],
+          }),
+        headers: new Headers(),
+      });
+
+      const result = await client.getClaimTransactions('fee-claimer', {
+        baseMint: 'So11111111111111111111111111111111111111112',
+        totalClaimableLamportsUserShare: 1000,
+        isCustomFeeVault: false,
+        programId: 'program-id',
+      } as any);
+
+      expect(result).toEqual([
+        {
+          tx: 'base64-transaction',
+          blockhash: {
+            blockhash: 'abc123',
+            lastValidBlockHeight: 123,
+          },
+        },
+      ]);
+    });
+  });
+
+  describe('priority-aware rate limiting', () => {
+    it('should preserve a high-priority execution lane when quota is low', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+        headers: new Headers({
+          'X-RateLimit-Remaining': '50',
+          'X-RateLimit-Reset': String(Math.floor(Date.now() / 1000) + 1),
+        }),
+      });
+
+      await client.getClaimablePositions('test-wallet');
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+        headers: new Headers({
+          'X-RateLimit-Remaining': '49',
+          'X-RateLimit-Reset': String(Math.floor(Date.now() / 1000) + 3600),
+        }),
+      });
+
+      const start = Date.now();
+      await client.getClaimablePositions('test-wallet', { priority: 'high' });
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(900);
     });
   });
 });

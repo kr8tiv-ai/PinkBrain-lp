@@ -7,13 +7,14 @@
 
 import type { Signer } from '@solana/web3.js';
 import type { Strategy, CompoundingRun } from '../types/index.js';
-import type { BagsClient } from '../clients/BagsClient.js';
+import type { BagsAdapter } from '../clients/BagsAdapter.js';
 import type { MeteoraClient } from '../clients/MeteoraClient.js';
 import type { HeliusClient } from '../clients/HeliusClient.js';
 import type { StrategyService } from '../services/StrategyService.js';
 import type { RunService } from './RunService.js';
 import type { AuditService } from './AuditService.js';
 import type { Database } from '../services/Database.js';
+import type { ExecutionPolicy } from './ExecutionPolicy.js';
 
 // ---------------------------------------------------------------------------
 // Transaction Signing
@@ -47,10 +48,11 @@ export interface TransactionSender {
 export interface PhaseContext {
   strategy: Strategy;
   run: CompoundingRun;
-  bagsClient: BagsClient;
+  bagsClient: BagsAdapter;
   meteoraClient: MeteoraClient;
   heliusClient: HeliusClient;
   sender: TransactionSender;
+  executionPolicy?: ExecutionPolicy;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,9 +102,10 @@ export interface EngineConfig {
   strategyService: StrategyService;
   runService: RunService;
   auditService: AuditService;
-  bagsClient: BagsClient;
+  bagsClient: BagsAdapter;
   meteoraClient: MeteoraClient;
   heliusClient: HeliusClient;
   sender: TransactionSender;
   db: Database;
+  executionPolicy?: ExecutionPolicy;
 }

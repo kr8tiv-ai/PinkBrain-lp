@@ -20,8 +20,11 @@ export async function executeClaimPhase(ctx: PhaseContext): Promise<ClaimPhaseRe
   const wallet = strategy.ownerWallet;
 
   // 1. Get total claimable
-  const { totalLamports, positions } = await bagsClient.getTotalClaimableSol(wallet);
+  const { totalLamports, positions } = await bagsClient.getTotalClaimableSol(wallet, {
+    priority: 'high',
+  });
   const claimableAmount = Number(totalLamports);
+  ctx.executionPolicy?.assertClaimAmount(claimableAmount);
 
   // 2. Threshold check
   const thresholdLamports = Math.floor(strategy.minCompoundThreshold * LAMPORTS_PER_SOL);
@@ -39,7 +42,9 @@ export async function executeClaimPhase(ctx: PhaseContext): Promise<ClaimPhaseRe
 
   for (const position of positions) {
     if (BigInt(position.totalClaimableLamportsUserShare || 0) > 0n) {
-      const claimTxs = await bagsClient.getClaimTransactions(wallet, position);
+      const claimTxs = await bagsClient.getClaimTransactions(wallet, position, {
+        priority: 'high',
+      });
 
       for (const claimTx of claimTxs) {
         const result = await sender.signAndSendTransaction(claimTx.tx);

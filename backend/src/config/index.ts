@@ -32,6 +32,12 @@ export interface Config {
   // Signing
   signerPrivateKey: string;
 
+  // Runtime execution policy
+  dryRun: boolean;
+  executionKillSwitch: boolean;
+  maxDailyRuns: number;
+  maxClaimableSolPerRun: number;
+
   // Environment
   nodeEnv: 'development' | 'production' | 'test';
   logLevel: 'debug' | 'info' | 'warn' | 'error';
@@ -58,6 +64,15 @@ function getEnvNumber(key: string, defaultValue?: number): number {
     throw new Error(`Environment variable ${key} must be a number`);
   }
   return value;
+}
+
+function getEnvBoolean(key: string, defaultValue = false): boolean {
+  const value = process.env[key];
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
 export function loadConfig(): Config {
@@ -97,6 +112,12 @@ export function loadConfig(): Config {
 
     // Signing
     signerPrivateKey: getEnv('SIGNER_PRIVATE_KEY', ''),
+
+    // Runtime execution policy
+    dryRun: getEnvBoolean('DRY_RUN', false),
+    executionKillSwitch: getEnvBoolean('EXECUTION_KILL_SWITCH', false),
+    maxDailyRuns: getEnvNumber('MAX_DAILY_RUNS', 0),
+    maxClaimableSolPerRun: getEnvNumber('MAX_CLAIMABLE_SOL_PER_RUN', 0),
 
     // Environment
     nodeEnv: (getEnv('NODE_ENV', 'development')) as Config['nodeEnv'],

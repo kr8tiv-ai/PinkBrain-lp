@@ -107,6 +107,7 @@ export class Engine {
 
     // Load strategy
     const strategy = await strategyService.getStrategy(strategyId);
+    this.config.executionPolicy?.assertCanStartRun(strategyId, runService);
 
     // Concurrent run prevention
     if (strategy.lastRunId) {
@@ -179,7 +180,8 @@ export class Engine {
       bagsClient: this.config.bagsClient,
       meteoraClient: this.config.meteoraClient,
       heliusClient: this.config.heliusClient,
-      sender: this.config.sender,
+      sender: this.config.executionPolicy?.wrapSender(this.config.sender) ?? this.config.sender,
+      executionPolicy: this.config.executionPolicy,
     };
 
     // Execute each phase in order
@@ -320,6 +322,7 @@ export class Engine {
   private errorCodeFromException(error: Error): string {
     if (error.name === 'RunStateError') return 'INVALID_STATE_TRANSITION';
     if (error.name === 'RunNotFoundError') return 'RUN_NOT_FOUND';
+    if (error.name === 'ExecutionPolicyError') return 'EXECUTION_POLICY';
     if (error.message.includes('threshold')) return 'BELOW_THRESHOLD';
     if (error.message.includes('insufficient')) return 'INSUFFICIENT_FUNDS';
     if (error.message.includes('timeout')) return 'TIMEOUT';

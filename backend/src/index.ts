@@ -15,11 +15,13 @@ import { createHeliusClient } from './clients/HeliusClient.js';
 import { createServer } from './api/server.js';
 import { createAuditService } from './engine/AuditService.js';
 import { Engine } from './engine/Engine.js';
+import { ExecutionPolicy } from './engine/ExecutionPolicy.js';
 import { createRunService } from './engine/RunService.js';
 import { createScheduler } from './engine/Scheduler.js';
 import type { EngineConfig, TransactionSender } from './engine/types.js';
 import { createKeypairTransactionSender } from './services/KeypairTransactionSender.js';
 import { Database } from './services/Database.js';
+import { HealthService } from './services/HealthService.js';
 import { createStrategyService } from './services/StrategyService.js';
 
 async function main() {
@@ -39,7 +41,7 @@ async function main() {
 
   const connection = new Connection(config.heliusRpcUrl, 'confirmed');
 
-  const bagsClient = createBagsClient(config.bagsApiKey, config.bagsApiBaseUrl);
+  const bagsClient = createBagsClient(config.bagsApiKey, config.bagsApiBaseUrl, connection);
   const meteoraClient = createMeteoraClient(connection);
   const heliusClient = createHeliusClient({
     apiKey: config.heliusApiKey,
@@ -73,6 +75,13 @@ async function main() {
   const strategyService = createStrategyService(db, connection);
   const runService = createRunService(db);
   const auditService = createAuditService(db);
+  const executionPolicy = new ExecutionPolicy({
+    dryRun: config.dryRun,
+    killSwitchEnabled: config.executionKillSwitch,
+    maxDailyRuns: config.maxDailyRuns,
+    maxClaimableSolPerRun: config.maxClaimableSolPerRun,
+  });
+  const healthService = new HealthService(db, config);
 
   const engineConfig: EngineConfig = {
     strategyService,
@@ -83,6 +92,7 @@ async function main() {
     heliusClient,
     sender,
     db,
+    executionPolicy,
   };
   const engine = new Engine(engineConfig);
 
@@ -101,6 +111,7 @@ async function main() {
     scheduler,
     db,
     config,
+    healthService,
   });
 
   await app.listen({ port, host });

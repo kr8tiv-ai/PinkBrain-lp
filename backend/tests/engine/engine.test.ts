@@ -15,6 +15,7 @@ import { Database } from '../../src/services/Database.js';
 import { createRunService } from '../../src/engine/RunService.js';
 import { createAuditService } from '../../src/engine/AuditService.js';
 import { Engine, ConcurrentRunError } from '../../src/engine/Engine.js';
+import { ExecutionPolicy } from '../../src/engine/ExecutionPolicy.js';
 import type { EngineConfig } from '../../src/engine/types.js';
 import type { TransactionSender } from '../../src/engine/types.js';
 import type { Strategy, CompoundingRun, RunState } from '../../src/types/index.js';
@@ -518,6 +519,94 @@ describe('Engine', () => {
       const skipLogs = logs.filter((l) => l.action === 'SKIP');
       expect(skipLogs.length).toBe(1);
       expect(skipLogs[0].details).toMatchObject({ reason: 'below_threshold' });
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // Execution policy
+  // ---------------------------------------------------------------
+  describe('execution policy', () => {
+    it('does not call the real sender when dry-run is enabled', async () => {
+      const config = createTestConfig();
+      const sender = config.sender as TransactionSender;
+      const policy = new ExecutionPolicy({
+        dryRun: true,
+        killSwitchEnabled: false,
+        maxDailyRuns: 0,
+        maxClaimableSolPerRun: 0,
+      });
+
+      const engine = new Engine({
+        ...config,
+        executionPolicy: policy,
+      });
+
+      const run = await engine.executeStrategy('test-strategy-id');
+
+      expect(run.state).toBe('COMPLETE');
+      expect(sender.signAndSendTransaction).not.toHaveBeenCalled();
+      expect(run.claim?.txSignature).toContain('dryrun');
+    });
+
+    it('blocks execution when the kill switch is enabled', async () => {
+      const config = createTestConfig();
+      const policy = new ExecutionPolicy({
+        dryRun: false,
+        killSwitchEnabled: true,
+        maxDailyRuns: 0,
+        maxClaimableSolPerRun: 0,
+      });
+
+      const engine = new Engine({
+        ...config,
+        executionPolicy: policy,
+      });
+
+      await expect(engine.executeStrategy('test-strategy-id')).rejects.toMatchObject({
+        code: 'KILL_SWITCH_ACTIVE',
+      });
+    });
+
+    it('enforces max daily runs per strategy', async () => {
+      const config = createTestConfig();
+      const policy = new ExecutionPolicy({
+        dryRun: false,
+        killSwitchEnabled: false,
+        maxDailyRuns: 1,
+        maxClaimableSolPerRun: 0,
+      });
+
+      const engine = new Engine({
+        ...config,
+        executionPolicy: policy,
+      });
+
+      await engine.executeStrategy('test-strategy-id');
+
+      await expect(engine.executeStrategy('test-strategy-id')).rejects.toMatchObject({
+        code: 'MAX_DAILY_RUNS_EXCEEDED',
+      });
+    });
+
+    it('fails the run when claimable amount exceeds the per-run cap', async () => {
+      const config = createTestConfig();
+      const policy = new ExecutionPolicy({
+        dryRun: false,
+        killSwitchEnabled: false,
+        maxDailyRuns: 0,
+        maxClaimableSolPerRun: 5,
+      });
+
+      const engine = new Engine({
+        ...config,
+        executionPolicy: policy,
+      });
+
+      const run = await engine.executeStrategy('test-strategy-id');
+
+      expect(run.state).toBe('FAILED');
+      expect(run.error?.code).toBe('EXECUTION_POLICY');
+      expect(run.error?.detail).toContain('per-run maximum');
     });
   });
 });

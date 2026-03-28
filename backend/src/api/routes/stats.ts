@@ -44,6 +44,11 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: ApiContext): void
         successRate,
       },
       scheduledJobs: ctx.scheduler.getScheduledCount(),
+      runtime: {
+        dryRun: ctx.config.dryRun,
+        killSwitchEnabled: ctx.config.executionKillSwitch,
+        apiAuthProtected: Boolean(ctx.config.apiAuthToken),
+      },
     };
   });
 }
