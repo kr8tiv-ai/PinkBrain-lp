@@ -8,6 +8,14 @@ dist/
 build/
 *.tsbuildinfo
 
+# TypeScript build artifacts outside dist/
+backend/scripts/**/*.js
+backend/scripts/**/*.d.ts
+backend/scripts/**/*.map
+backend/tests/**/*.js
+backend/tests/**/*.d.ts
+backend/tests/**/*.map
+
 # Environment files
 .env
 .env.local
