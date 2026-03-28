@@ -2,8 +2,10 @@
  * Fastify HTTP server setup with CORS and error mapping.
  */
 
+import { timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import type { ApiContext } from './context.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerStrategyRoutes } from './routes/strategies.js';
@@ -21,6 +23,12 @@ import { createLoggerOptions } from '../services/logger.js';
 export async function createServer(ctx: ApiContext) {
   const app = Fastify({ logger: createLoggerOptions(ctx.config) as any });
   const allowedOrigins = new Set(ctx.config.corsOrigins);
+
+  // Global rate limiting
+  await app.register(rateLimit, {
+    max: 120,
+    timeWindow: '1 minute',
+  });
 
   await app.register(cors, {
     origin: (origin, cb) => {
@@ -50,20 +58,21 @@ export async function createServer(ctx: ApiContext) {
     }
 
     if (!ctx.config.apiAuthToken) {
-      if (ctx.config.nodeEnv === 'production') {
-        reply.code(503).send({
-          error: 'ServerMisconfigured',
-          message: 'API_AUTH_TOKEN is required in production',
-        });
-      }
+      reply.code(503).send({
+        error: 'ServerMisconfigured',
+        message: 'API_AUTH_TOKEN must be configured',
+      });
       return;
     }
 
-    if (request.headers.authorization !== `Bearer ${ctx.config.apiAuthToken}`) {
+    const expected = Buffer.from(`Bearer ${ctx.config.apiAuthToken}`);
+    const received = Buffer.from(request.headers.authorization ?? '');
+    if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
       reply.code(401).send({
         error: 'Unauthorized',
         message: 'Missing or invalid API token',
       });
+      return;
     }
   });
 

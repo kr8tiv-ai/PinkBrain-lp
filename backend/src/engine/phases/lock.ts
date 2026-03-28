@@ -47,8 +47,17 @@ export async function executeLockPhase(ctx: PhaseContext): Promise<LockPhaseResu
     Buffer.from(lockTx.serialize()).toString('base64'),
   );
 
+  // Verify lock was applied on-chain
+  const positionState = await meteoraClient.fetchPositionState(position);
+  const lockedLiquidity = positionState.permanentLockedLiquidity ?? new BN(0);
+  if (lockedLiquidity.isZero()) {
+    throw new Error(
+      `Lock verification failed: position ${position.toString()} has zero permanent locked liquidity after tx ${result.signature}`,
+    );
+  }
+
   return {
     txSignature: result.signature,
-    permanentLockedLiquidity: run.liquidityAdd.liquidityDelta,
+    permanentLockedLiquidity: lockedLiquidity.toString(),
   };
 }

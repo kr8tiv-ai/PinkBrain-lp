@@ -10,6 +10,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { migrations } from './migrations/index.js';
 
+// CJS fallback: eval prevents bundlers from resolving node:sqlite statically
 const nodeRequire = eval('require') as NodeJS.Require;
 
 export interface StatementLike {

@@ -52,21 +52,29 @@ function getParentOrigin(): string | null {
  * When the Bags platform injects `window.bagsAgent`, use that directly.
  */
 function createBagsProxy(): BagsAgent | null {
-  // Check for injected global
+  // Check for injected global (trusted — Bags platform injects this)
   const injected = (window as any).bagsAgent;
   if (injected && typeof injected.getWalletAddress === 'function') {
+    console.warn('[useBagsAuth] Using injected window.bagsAgent — trust assumption: Bags platform context');
     return injected as BagsAgent;
   }
 
   // postMessage-based fallback
   if (!isInIframe()) return null;
 
-  let messageId = 0;
-  const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
   const targetOrigin = getParentOrigin();
 
+  // Require explicit origin — never send postMessage to '*' in iframe mode
+  if (!targetOrigin) {
+    console.warn('[useBagsAuth] No parent origin configured (set VITE_BAGS_PARENT_ORIGIN). Refusing postMessage to *.');
+    return null;
+  }
+
+  let messageId = 0;
+  const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+
   const onMessage = (event: MessageEvent) => {
-    if (targetOrigin && event.origin !== targetOrigin) {
+    if (event.origin !== targetOrigin) {
       return;
     }
     if (event.data?.type === 'bags:response' && typeof event.data.id === 'number') {
@@ -90,7 +98,7 @@ function createBagsProxy(): BagsAgent | null {
       pending.set(id, { resolve, reject });
       window.parent.postMessage(
         { type: 'bags:request', id, method, params },
-        targetOrigin ?? '*',
+        targetOrigin,
       );
       // Timeout after 30 seconds
       setTimeout(() => {

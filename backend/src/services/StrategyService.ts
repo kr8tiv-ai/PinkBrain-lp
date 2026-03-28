@@ -145,6 +145,17 @@ export class StrategyService {
   // ---------------------------------------------------------------
 
   /**
+   * Verify a string is a valid Solana public key.
+   */
+  private validatePublicKey(address: string, fieldName: string): void {
+    try {
+      new PublicKey(address);
+    } catch {
+      throw new StrategyValidationError(fieldName, 'INVALID_PUBLIC_KEY', address);
+    }
+  }
+
+  /**
    * Verify a token mint exists on-chain by calling getAccountInfo.
    * Throws if the account is null (token doesn't exist) or RPC fails.
    */
@@ -226,6 +237,13 @@ export class StrategyService {
    * Generates UUID, sets timestamps, status = ACTIVE, lastRunId = null.
    */
   async createStrategy(input: StrategyCreateInput): Promise<Strategy> {
+    // Validate wallet addresses are valid public keys
+    this.validatePublicKey(input.ownerWallet, 'ownerWallet');
+    this.validatePublicKey(input.distributionToken, 'distributionToken');
+    for (const addr of input.exclusionList) {
+      this.validatePublicKey(addr, 'exclusionList');
+    }
+
     // Validate tokens exist on-chain
     await this.validateTokenMint(input.targetTokenA, 'targetTokenA');
     await this.validateTokenMint(input.targetTokenB, 'targetTokenB');

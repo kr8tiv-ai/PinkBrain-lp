@@ -18,6 +18,10 @@ export async function executeLiquidityPhase(ctx: PhaseContext): Promise<Liquidit
   const tokenAAmount = run.swap?.tokenAReceived ?? 0;
   const tokenBAmount = run.swap?.tokenBReceived ?? 0;
 
+  if (tokenAAmount === 0 && tokenBAmount === 0) {
+    return null as unknown as LiquidityPhaseResult;
+  }
+
   let poolAddress: PublicKey;
   if (strategy.meteoraConfig.poolAddress) {
     poolAddress = new PublicKey(strategy.meteoraConfig.poolAddress);
@@ -71,8 +75,8 @@ export async function executeLiquidityPhase(ctx: PhaseContext): Promise<Liquidit
     liquidityDelta: depositQuote.liquidityDelta,
     maxAmountTokenA: amountABn,
     maxAmountTokenB: amountBBn,
-    tokenAAmountThreshold: new BN(0),
-    tokenBAmountThreshold: new BN(0),
+    tokenAAmountThreshold: amountABn.muln(10000 - (strategy.swapConfig.slippageBps || 50)).divn(10000),
+    tokenBAmountThreshold: amountBBn.muln(10000 - (strategy.swapConfig.slippageBps || 50)).divn(10000),
     tokenAMint: poolState.tokenAMint,
     tokenBMint: poolState.tokenBMint,
     tokenAVault: poolState.tokenAVault,

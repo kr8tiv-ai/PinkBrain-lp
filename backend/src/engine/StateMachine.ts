@@ -138,7 +138,7 @@ export class StateMachine {
    * Check if a state is an active (non-terminal) phase state.
    */
   isActive(state: RunState): boolean {
-    return !this.isTerminal(state) && state !== 'PENDING';
+    return !this.isTerminal(state);
   }
 }
 

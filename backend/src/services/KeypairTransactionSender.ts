@@ -56,13 +56,20 @@ export class KeypairTransactionSender implements TransactionSender {
     const transaction = decodeTransaction(serializedTx);
     const signers = [this.signer, ...(options?.extraSigners ?? [])];
 
+    // Get blockhash context for modern confirmTransaction
+    const { blockhash, lastValidBlockHeight } =
+      await this.connection.getLatestBlockhash(this.commitment);
+
     if (transaction instanceof VersionedTransaction) {
       transaction.sign(signers);
       const signature = await this.connection.sendTransaction(transaction, {
         maxRetries: 3,
         skipPreflight: options?.skipPreflight,
       });
-      await this.connection.confirmTransaction(signature, this.commitment);
+      await this.connection.confirmTransaction(
+        { signature, blockhash, lastValidBlockHeight },
+        this.commitment,
+      );
       return { signature };
     }
 
@@ -71,7 +78,10 @@ export class KeypairTransactionSender implements TransactionSender {
       maxRetries: 3,
       skipPreflight: options?.skipPreflight,
     });
-    await this.connection.confirmTransaction(signature, this.commitment);
+    await this.connection.confirmTransaction(
+      { signature, blockhash, lastValidBlockHeight },
+      this.commitment,
+    );
     return { signature };
   }
 }

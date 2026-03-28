@@ -109,24 +109,24 @@ export class Engine {
     const strategy = await strategyService.getStrategy(strategyId);
     this.config.executionPolicy?.assertCanStartRun(strategyId, runService);
 
-    // Concurrent run prevention
-    if (strategy.lastRunId) {
-      try {
-        const lastRun = runService.getRun(strategy.lastRunId);
-        if (stateMachine.isActive(lastRun.state)) {
-          throw new ConcurrentRunError(strategyId, lastRun.runId);
+    // Atomic: check for active run + create new run in a single transaction
+    const run = this.config.db.getDb().transaction(() => {
+      if (strategy.lastRunId) {
+        try {
+          const lastRun = runService.getRun(strategy.lastRunId);
+          if (stateMachine.isActive(lastRun.state)) {
+            throw new ConcurrentRunError(strategyId, lastRun.runId);
+          }
+        } catch (err) {
+          if (err instanceof ConcurrentRunError) throw err;
+          // RunNotFoundError — continue
         }
-      } catch (err) {
-        // If run not found, it was likely cleaned up — safe to proceed
-        if (err instanceof ConcurrentRunError) throw err;
-        // RunNotFoundError — continue
       }
-    }
 
-    // Create new run
-    const run = runService.createRun(strategyId);
+      return runService.createRun(strategyId);
+    })();
 
-    // Update strategy's lastRunId
+    // Update strategy's lastRunId (outside txn — uses service API for tests/hooks)
     await strategyService.updateStrategy(strategyId, { lastRunId: run.runId });
 
     // Execute the run
@@ -303,15 +303,21 @@ export class Engine {
     auditService.logTransition(runId, run.state, 'FAILED');
     auditService.logError(runId, error);
 
-    // Pause strategy after 3 consecutive failures
-    const runCount = runService.getRunsByStrategyId(strategy.strategyId);
-    const recentFailures = runCount.filter((r) => r.state === 'FAILED').length;
+    // Pause strategy after 3 consecutive failures (most recent 3 runs)
+    if (strategy.status === 'PAUSED') return; // already paused
 
-    if (recentFailures >= 3) {
+    const allRuns = runService.getRunsByStrategyId(strategy.strategyId);
+    const sorted = allRuns
+      .filter((r) => r.startedAt)
+      .sort((a, b) => (b.startedAt! > a.startedAt! ? 1 : -1));
+    const lastThree = sorted.slice(0, 3);
+    const consecutiveFailures = lastThree.length === 3 && lastThree.every((r) => r.state === 'FAILED');
+
+    if (consecutiveFailures) {
       strategyService.updateStrategy(strategy.strategyId, { status: 'PAUSED' });
       auditService.log(runId, 'STRATEGY_PAUSED', {
         strategyId: strategy.strategyId,
-        consecutiveFailures: recentFailures,
+        consecutiveFailures: 3,
       });
     }
   }

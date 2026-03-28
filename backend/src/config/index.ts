@@ -85,7 +85,7 @@ export function loadConfig(): Config {
   const solanaNetwork = getEnv('SOLANA_NETWORK', 'mainnet-beta') as 'mainnet-beta' | 'devnet';
   const corsOrigins = getEnv(
     'CORS_ORIGINS',
-    'http://localhost:5173,http://localhost:3000,https://bags.fm,https://www.bags.fm',
+    'https://bags.fm,https://www.bags.fm',
   )
     .split(',')
     .map((origin) => origin.trim())

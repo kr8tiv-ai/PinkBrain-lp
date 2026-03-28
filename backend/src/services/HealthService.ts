@@ -92,15 +92,12 @@ export class HealthService {
         },
         heliusRpc: {
           status: heliusStatus,
-          endpoint: this.config.heliusRpcUrl,
+          endpoint: this.redactUrl(this.config.heliusRpcUrl),
         },
         agentAuth: {
           status: agentStatus,
-          username: this.config.bagsAgentUsername || null,
-          walletAddress: (
-            this.runtime.resolvedAgentWalletAddress
-            ?? this.config.bagsAgentWalletAddress
-          ) || null,
+          username: null,
+          walletAddress: null,
         },
         signer: {
           status: signerStatus,
@@ -124,6 +121,15 @@ export class HealthService {
     }
 
     return 'missing';
+  }
+
+  private redactUrl(url: string): string {
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname;
+    } catch {
+      return '[invalid]';
+    }
   }
 
   private getDatabaseStatus(): 'ok' | 'error' {

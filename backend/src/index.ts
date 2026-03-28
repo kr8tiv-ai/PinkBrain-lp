@@ -7,6 +7,7 @@
  */
 
 import { resolve } from 'node:path';
+import pino from 'pino';
 import { Connection } from '@solana/web3.js';
 import { getConfig } from './config/index.js';
 import { createBagsAgentClient } from './clients/BagsAgentClient.js';
@@ -22,23 +23,22 @@ import { createScheduler } from './engine/Scheduler.js';
 import type { EngineConfig } from './engine/types.js';
 import { Database } from './services/Database.js';
 import { HealthService } from './services/HealthService.js';
+import { createLoggerOptions } from './services/logger.js';
 import { resolveTransactionSender } from './services/resolveTransactionSender.js';
 import { createStrategyService } from './services/StrategyService.js';
 
 async function main() {
   const config = getConfig();
+  const log = pino(createLoggerOptions(config) as pino.LoggerOptions);
   const port = parseInt(process.env.PORT ?? '3001', 10);
   const host = process.env.HOST ?? '0.0.0.0';
 
-  console.log('PinkBrain LP Backend Starting...');
-  console.log(`Network: ${config.solanaNetwork}`);
-  console.log(`Fee Threshold: ${config.feeThresholdSol} SOL`);
-  console.log(`Environment: ${config.nodeEnv}`);
+  log.info({ network: config.solanaNetwork, env: config.nodeEnv }, 'PinkBrain LP Backend starting');
 
   const dbPath = process.env.DB_PATH || resolve(process.cwd(), 'data', 'pinkbrain.db');
   const db = new Database({ dbPath });
   db.init();
-  console.log(`Database: ${dbPath}`);
+  log.info('Database initialized');
 
   const connection = new Connection(config.heliusRpcUrl, 'confirmed');
 
@@ -61,7 +61,7 @@ async function main() {
     if (config.nodeEnv === 'production') {
       throw new Error(message);
     }
-    console.warn(message);
+    log.warn(message);
   }
 
   if (!config.apiAuthToken && config.nodeEnv === 'production') {
@@ -114,18 +114,16 @@ async function main() {
   });
 
   await app.listen({ port, host });
-  console.log(`API server listening on http://${host}:${port}`);
+  log.info({ port, host }, 'API server listening');
 
   await scheduler.start();
-  console.log(`Scheduler started: ${scheduler.getScheduledCount()} strategies scheduled`);
-  console.log('\nPinkBrain LP Backend Ready');
+  log.info({ scheduled: scheduler.getScheduledCount() }, 'Scheduler started — backend ready');
 
   const shutdown = async () => {
-    console.log('\nShutting down...');
+    log.info('Shutting down');
     scheduler.stop();
     await app.close();
     db.close();
-    console.log('Shutdown complete');
     process.exit(0);
   };
 
@@ -134,6 +132,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  pino().fatal({ err: error }, 'Fatal startup error');
   process.exit(1);
 });

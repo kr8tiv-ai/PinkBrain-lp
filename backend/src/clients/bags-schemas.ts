@@ -54,7 +54,7 @@ export const ClaimablePositionSchema = z.object({
   customFeeVaultClaimerA: z.string().default(''),
   customFeeVaultClaimerB: z.string().default(''),
   customFeeVaultClaimerSide: z.enum(['A', 'B']).default('A'),
-}).passthrough();
+}).strip();
 
 export const ClaimablePositionsSchema = z.array(ClaimablePositionSchema);
 
@@ -64,13 +64,13 @@ export const ClaimTransactionSchema = z.object({
     blockhash: z.string(),
     lastValidBlockHeight: numberish,
   }),
-}).passthrough();
+}).strip();
 
 export const ClaimTransactionsSchema = z.array(ClaimTransactionSchema);
 
 export const PartnerClaimTransactionSchema = z.object({
   transactions: ClaimTransactionsSchema,
-}).passthrough();
+}).strip();
 
 export const TradeQuoteSchema = z.object({
   requestId: z.string(),
@@ -103,14 +103,14 @@ export const TradeQuoteSchema = z.object({
   }).passthrough(),
   outTransferFee: stringish,
   simulatedComputeUnits: numberish,
-}).passthrough();
+}).strip();
 
 export const SwapTransactionSchema = z.object({
   swapTransaction: z.string(),
   computeUnitLimit: numberish,
   lastValidBlockHeight: numberish,
   prioritizationFeeLamports: numberish,
-}).passthrough();
+}).strip();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;

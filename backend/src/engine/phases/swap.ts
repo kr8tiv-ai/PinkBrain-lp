@@ -32,6 +32,8 @@ export async function executeSwapPhase(ctx: PhaseContext): Promise<SwapPhaseResu
   const halfAmount = Math.floor(claimedAmount / 2);
   const txSignatures: string[] = [];
 
+  const maxImpactPct = (strategy.swapConfig.maxPriceImpactBps || 500) / 100;
+
   // Swap half → tokenA
   const quoteA = await bagsClient.getTradeQuote({
     inputMint: SOL_MINT,
@@ -39,6 +41,11 @@ export async function executeSwapPhase(ctx: PhaseContext): Promise<SwapPhaseResu
     amount: halfAmount,
     slippageBps: strategy.swapConfig.slippageBps,
   }, { priority: 'high' });
+
+  const impactA = parseFloat(quoteA.priceImpactPct);
+  if (isNaN(impactA) || impactA > maxImpactPct) {
+    throw new Error(`Token A swap price impact ${impactA}% exceeds max ${maxImpactPct}%`);
+  }
 
   const swapTxA = await bagsClient.createSwapTransaction(quoteA, wallet, {
     priority: 'high',
@@ -53,6 +60,11 @@ export async function executeSwapPhase(ctx: PhaseContext): Promise<SwapPhaseResu
     amount: halfAmount,
     slippageBps: strategy.swapConfig.slippageBps,
   }, { priority: 'high' });
+
+  const impactB = parseFloat(quoteB.priceImpactPct);
+  if (isNaN(impactB) || impactB > maxImpactPct) {
+    throw new Error(`Token B swap price impact ${impactB}% exceeds max ${maxImpactPct}%`);
+  }
 
   const swapTxB = await bagsClient.createSwapTransaction(quoteB, wallet, {
     priority: 'high',

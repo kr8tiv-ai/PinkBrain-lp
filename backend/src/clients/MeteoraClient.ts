@@ -809,10 +809,22 @@ export class MeteoraClient {
    * Calculate sqrt price from token ratio
    */
   calculateSqrtPrice(tokenAAmount: BN, tokenBAmount: BN): BN {
-    // sqrtPrice = sqrt(tokenB / tokenA) in Q64 format
-    // Simplified - actual SDK handles precision properly
-    const ratio = tokenBAmount.mul(new BN(2).pow(new BN(64))).div(tokenAAmount);
-    return ratio;
+    // sqrtPrice = sqrt(tokenB / tokenA) * 2^64 (Q64 format)
+    const Q64 = new BN(2).pow(new BN(64));
+    const scaledRatio = tokenBAmount.mul(Q64).mul(Q64).div(tokenAAmount);
+    // Integer square root via Newton's method
+    return this.isqrt(scaledRatio);
+  }
+
+  private isqrt(n: BN): BN {
+    if (n.isZero()) return new BN(0);
+    let x = n;
+    let y = x.add(new BN(1)).shrn(1);
+    while (y.lt(x)) {
+      x = y;
+      y = x.add(n.div(x)).shrn(1);
+    }
+    return x;
   }
 
   /**

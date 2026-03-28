@@ -37,7 +37,7 @@ export async function executeClaimPhase(ctx: PhaseContext): Promise<ClaimPhaseRe
   }
 
   // 3. Get and send claim transactions for each position with non-zero claimable
-  let lastSignature: string | null = null;
+  const txSignatures: string[] = [];
   let confirmedAt: string | null = null;
 
   for (const position of positions) {
@@ -48,7 +48,7 @@ export async function executeClaimPhase(ctx: PhaseContext): Promise<ClaimPhaseRe
 
       for (const claimTx of claimTxs) {
         const result = await sender.signAndSendTransaction(claimTx.tx);
-        lastSignature = result.signature;
+        txSignatures.push(result.signature);
         confirmedAt = new Date().toISOString();
       }
     }
@@ -56,7 +56,8 @@ export async function executeClaimPhase(ctx: PhaseContext): Promise<ClaimPhaseRe
 
   return {
     claimableAmount,
-    txSignature: lastSignature,
+    txSignature: txSignatures[txSignatures.length - 1] ?? null,
+    txSignatures,
     confirmedAt,
   };
 }

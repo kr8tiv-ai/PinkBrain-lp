@@ -62,6 +62,7 @@ export interface PhaseContext {
 export interface ClaimPhaseResult {
   claimableAmount: number;
   txSignature: string | null;
+  txSignatures?: string[];
   confirmedAt: string | null;
 }
 

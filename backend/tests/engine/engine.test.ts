@@ -241,7 +241,7 @@ function createTestConfig(overrides?: Partial<EngineConfig>): EngineConfig {
       pool: new PublicKey(VALID_POOL),
       owner: new PublicKey(VALID_OWNER),
       unlockedLiquidity: { toString: () => '5000000' },
-      permanentLockedLiquidity: { toString: () => '0' },
+      permanentLockedLiquidity: { toString: () => '5000000', isZero: () => false, gt: () => true },
     })),
   } as unknown as MeteoraClient;
 

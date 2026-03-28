@@ -87,10 +87,17 @@ export async function buildTop100Distribution(
     };
   }
 
-  // 4. Calculate per-recipient amounts
+  // 4. Calculate per-recipient amounts using BigInt to avoid float precision loss
+  const totalBigInt = BigInt(totalAmount);
+  const totalBalanceBigInt = weighted.reduce(
+    (sum, w) => sum + BigInt(w.balance.toString()),
+    0n,
+  );
   const recipients: DistributionRecipient[] = weighted.map((w) => ({
     owner: w.owner,
-    amount: Math.floor(w.weight * totalAmount),
+    amount: totalBalanceBigInt > 0n
+      ? Number((BigInt(w.balance.toString()) * totalBigInt) / totalBalanceBigInt)
+      : Math.floor(w.weight * totalAmount),
   }));
 
   // 5. Distribute remainder to first recipient
@@ -102,10 +109,10 @@ export async function buildTop100Distribution(
 
   // 6. Batch recipients and send transactions
   const batches = buildBatches(recipients, mint, owner, sourceAta);
-  const blockhash = (await connection.getLatestBlockhash('confirmed')).blockhash;
 
   const txSignatures: string[] = [];
   for (const batch of batches) {
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
     const transaction = new Transaction();
     transaction.add(...batch.instructions);
     transaction.recentBlockhash = blockhash;

@@ -331,7 +331,7 @@ describe('StrategyService', () => {
 
       const s1 = await service.createStrategy(validInput({ schedule: '0 * * * *' }));
       const s2 = await service.createStrategy(validInput({
-        ownerWallet: 'DifferentWalletAddress1111111111111111',
+        ownerWallet: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
         schedule: '0 */2 * * *',
       }));
 
@@ -542,7 +542,11 @@ describe('StrategyService', () => {
       const mockConn = createMockConnection();
       service = createStrategyService(database, mockConn);
 
-      const exclusionList = ['wallet1', 'wallet2', 'wallet3'];
+      const exclusionList = [
+        'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+        '9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E',
+        'HWHvQhFmJB3NUcu1aihKmrKegfVxBEHzwVX6yZCKEsi1',
+      ];
       const created = await service.createStrategy(validInput({ exclusionList }));
       const fetched = await service.getStrategy(created.strategyId);
 

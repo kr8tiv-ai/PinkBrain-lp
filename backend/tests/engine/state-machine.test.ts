@@ -265,9 +265,9 @@ describe('StateMachine', () => {
   });
 
   describe('isActive', () => {
-    it('returns true for phase states but not PENDING', () => {
+    it('returns true for all non-terminal states including PENDING', () => {
       const sm = new StateMachine();
-      expect(sm.isActive('PENDING')).toBe(false);
+      expect(sm.isActive('PENDING')).toBe(true);
       expect(sm.isActive('CLAIMING')).toBe(true);
       expect(sm.isActive('SWAPPING')).toBe(true);
       expect(sm.isActive('DISTRIBUTING')).toBe(true);

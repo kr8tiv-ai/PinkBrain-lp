@@ -174,8 +174,11 @@ export class HeliusClient {
   ): Promise<TokenAccount[]> {
     const allAccounts: TokenAccount[] = [];
     let cursor = options?.cursor;
+    let pages = 0;
+    const maxPages = 100;
 
     do {
+      if (++pages > maxPages) break;
       const response = await fetch(this.rpcUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -250,9 +253,12 @@ export class HeliusClient {
   calculateDistributionWeights(
     holders: TokenHolder[]
   ): Array<{ owner: string; weight: number; balance: BN }> {
-    const totalBalance = holders.reduce((sum, h) => sum.add(h.balance), new BN(0));
-    
-    if (totalBalance.isZero()) {
+    const totalBalanceBigInt = holders.reduce(
+      (sum, h) => sum + BigInt(h.balance.toString()),
+      0n,
+    );
+
+    if (totalBalanceBigInt === 0n) {
       return holders.map((h) => ({
         owner: h.owner,
         weight: 1 / holders.length,
@@ -260,11 +266,17 @@ export class HeliusClient {
       }));
     }
 
-    return holders.map((h) => ({
-      owner: h.owner,
-      weight: h.balance.toNumber() / totalBalance.toNumber(),
-      balance: h.balance,
-    }));
+    // Use BigInt scaled division (1e18 precision) to avoid float overflow
+    const SCALE = 1_000_000_000_000_000_000n;
+    return holders.map((h) => {
+      const balBigInt = BigInt(h.balance.toString());
+      const scaledWeight = (balBigInt * SCALE) / totalBalanceBigInt;
+      return {
+        owner: h.owner,
+        weight: Number(scaledWeight) / Number(SCALE),
+        balance: h.balance,
+      };
+    });
   }
 
   // ============================================
