@@ -240,29 +240,29 @@ describe('BagsClient', () => {
         }),
       });
 
-      const start = Date.now();
-      await client.getClaimablePositions('test-wallet', { priority: 'high' });
-      const elapsed = Date.now() - start;
+      const pendingRequest = client.getClaimablePositions('test-wallet', { priority: 'high' });
+      await Promise.resolve();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      await pendingRequest;
 
-      expect(elapsed).toBeLessThan(900);
+      expect(client.getRateLimitStatus().remaining).toBe(49);
     });
 
-    it('should share quota state across client instances via BagsRateLimiter', () => {
-      // Two limiters with the same key share state
-      const key = 'https://test-api.bags.fm/api/v1|test-api-key';
-      const limiterA = new BagsRateLimiter(key);
-      const limiterB = new BagsRateLimiter(key);
+    it('should share quota state across client instances', async () => {
+      const clientB = createBagsClient('test-api-key', 'https://test-api.bags.fm/api/v1');
 
-      // Update via limiter A
-      limiterA.updateFromHeaders(
-        new Headers({
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+        headers: new Headers({
           'X-RateLimit-Remaining': '42',
           'X-RateLimit-Reset': String(Math.floor(Date.now() / 1000) + 3600),
         }),
-      );
+      });
 
-      // Limiter B should see the same state
-      const snapshot = limiterB.getSnapshot();
+      await client.getClaimablePositions('test-wallet');
+
+      const snapshot = ((clientB as unknown as { rateLimiter: BagsRateLimiter }).rateLimiter).getSnapshot();
       expect(snapshot.remaining).toBe(42);
     });
   });
