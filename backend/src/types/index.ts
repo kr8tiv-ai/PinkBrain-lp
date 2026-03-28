@@ -153,17 +153,18 @@ export interface PoolState {
 export interface PositionState {
   positionBump: number;
   pool: PublicKey;
-  owner: PublicKey;
-  liquidity: BN;
+  owner?: PublicKey;
+  liquidity?: BN;
   unlockedLiquidity: BN;
-  vestedLiquidity: BN;
-  permanentLockedLiquidity: BN;
-  feeGrowthInsideX: BN;
-  feeGrowthInsideY: BN;
-  tokenAFees: BN;
-  tokenBFees: BN;
-  positionNftMint: PublicKey;
-  positionNftAccount: PublicKey;
+  vestedLiquidity?: BN;
+  permanentLockedLiquidity?: BN;
+  feeGrowthInsideX?: BN;
+  feeGrowthInsideY?: BN;
+  tokenAFees?: BN;
+  tokenBFees?: BN;
+  positionNftMint?: PublicKey;
+  positionNftAccount?: PublicKey;
+  nftMint?: PublicKey;
 }
 
 export interface CreatePositionParams {
@@ -322,6 +323,8 @@ export interface CompoundingRun {
   } | null;
   liquidityAdd: {
     positionNft: string;
+    positionAddress?: string;
+    positionNftAccount?: string;
     liquidityDelta: string;
     txSignature: string;
   } | null;

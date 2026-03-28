@@ -5,19 +5,17 @@
  * JSON columns store serialized objects; consumers are responsible for parse/stringify.
  */
 
-import type Database from 'better-sqlite3';
-
 export interface Migration {
   version: number;
   name: string;
-  up: (db: Database.Database) => void;
+  up: (db: { exec: (sql: string) => void }) => void;
 }
 
 export const migration001: Migration = {
   version: 1,
   name: 'create_strategies_and_runs',
 
-  up(db: Database.Database): void {
+  up(db: { exec: (sql: string) => void }): void {
     db.exec(`
       CREATE TABLE IF NOT EXISTS strategies (
         id                  TEXT PRIMARY KEY,

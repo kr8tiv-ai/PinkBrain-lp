@@ -289,14 +289,19 @@ export class HeliusClient {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const signature = await this.connection.sendTransaction(
-          transaction,
-          signers,
-          {
-            skipPreflight: options?.skipPreflight || false,
-            maxRetries: 1,
-          }
-        );
+        const signature = transaction instanceof VersionedTransaction
+          ? await this.connection.sendTransaction(transaction, {
+              skipPreflight: options?.skipPreflight || false,
+              maxRetries: 1,
+            })
+          : await this.connection.sendTransaction(
+              transaction,
+              signers,
+              {
+                skipPreflight: options?.skipPreflight || false,
+                maxRetries: 1,
+              },
+            );
 
         // Wait for confirmation
         const confirmation = await this.connection.confirmTransaction(

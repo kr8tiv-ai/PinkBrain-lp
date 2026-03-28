@@ -34,7 +34,7 @@ export type StrategyCreateInput = Omit<
 
 /** Fields allowed in an update call (any non-generated field). */
 export type StrategyUpdateInput = Partial<
-  Omit<Strategy, 'strategyId' | 'createdAt' | 'updatedAt' | 'lastRunId'>
+  Omit<Strategy, 'strategyId' | 'createdAt' | 'updatedAt'>
 >;
 
 // ---------------------------------------------------------------------------

@@ -21,12 +21,16 @@ import {
 // ---------------------------------------------------------------------------
 
 let tempDir: string;
+let database: Database | undefined;
+let service: AuditService;
 
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), 'pinkbrain-audit-test-'));
 });
 
 afterEach(() => {
+  database?.close();
+  database = undefined;
   if (existsSync(tempDir)) {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -41,6 +45,7 @@ function dbPath(): string {
  */
 function seedRun(db: Database, runId: string): void {
   const now = new Date().toISOString();
+  const strategyId = `strat-${runId}`;
   db.getDb().prepare(`
     INSERT INTO strategies (
       id, owner_wallet, source, target_token_a, target_token_b,
@@ -49,7 +54,7 @@ function seedRun(db: Database, runId: string): void {
       last_run_id, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    'strat-audit-test',
+    strategyId,
     'owner-wallet-test',
     'CLAIMABLE_POSITIONS',
     'So11111111111111111111111111111111111111112',
@@ -74,7 +79,7 @@ function seedRun(db: Database, runId: string): void {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     runId,
-    'strat-audit-test',
+    strategyId,
     'PENDING',
     now,
     null,
@@ -87,16 +92,9 @@ function seedRun(db: Database, runId: string): void {
   );
 }
 
-let database: Database;
-let service: AuditService;
-
 beforeEach(() => {
   database = new Database({ dbPath: dbPath() });
   database.init();
-});
-
-afterEach(() => {
-  database.close();
 });
 
 // ---------------------------------------------------------------------------

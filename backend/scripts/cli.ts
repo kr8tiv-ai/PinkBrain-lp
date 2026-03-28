@@ -80,14 +80,15 @@ export function registerStrategyCommands(program: Command): void {
     .option('--base-fee <fee>', 'Meteora pool base fee', '25')
     .option('--min-threshold <sol>', 'Minimum SOL threshold before compounding', '7')
     .action(async (opts) => {
+      // Validate token-a ≠ token-b before bootstrapping external dependencies
+      if (opts.tokenA === opts.tokenB) {
+        process.stderr.write('Error: token-a and token-b must be different addresses.\n');
+        process.exit(1);
+        return;
+      }
+
       try {
         const service = bootstrapService();
-
-        // Validate token-a ≠ token-b before hitting service
-        if (opts.tokenA === opts.tokenB) {
-          process.stderr.write('Error: token-a and token-b must be different addresses.\n');
-          process.exit(1);
-        }
 
         const strategy = await service.createStrategy({
           ownerWallet: opts.ownerWallet,
@@ -498,14 +499,25 @@ function formatDetails(details: unknown): string {
 // Program
 // ---------------------------------------------------------------------------
 
-const program = new Command();
+export function createProgram(): Command {
+  const program = new Command();
 
-program
-  .name('pinkbrain')
-  .description('PinkBrain LP — Fee-compounding engine for Bags.fm')
-  .version('0.1.0');
+  program
+    .name('pinkbrain')
+    .description('PinkBrain LP — Fee-compounding engine for Bags.fm')
+    .version('0.1.0');
 
-registerStrategyCommands(program);
-registerRunCommands(program);
+  registerStrategyCommands(program);
+  registerRunCommands(program);
 
-program.parse();
+  return program;
+}
+
+export async function runCli(argv = process.argv): Promise<void> {
+  const program = createProgram();
+  await program.parseAsync(argv);
+}
+
+if (require.main === module) {
+  void runCli();
+}

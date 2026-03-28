@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { PublicKey } from '@solana/web3.js';
 import { Database } from '../../src/services/Database.js';
 import { createRunService } from '../../src/engine/RunService.js';
 import { createAuditService } from '../../src/engine/AuditService.js';
@@ -27,6 +28,9 @@ import type { HeliusClient } from '../../src/clients/HeliusClient.js';
 
 let tempDir: string;
 let database: Database;
+
+const VALID_OWNER = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+const VALID_POOL = '3M8sA1B8f7s1X7B7X8kJ1zAq8Kp2Q9m5q9uK8LJ3TgR1';
 
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), 'pinkbrain-engine-test-'));
@@ -50,14 +54,14 @@ function seedStrategy(db: Database, overrides?: Partial<Strategy>): Strategy {
 
   const strategy: Strategy = {
     strategyId,
-    ownerWallet: 'owner-wallet-test',
+    ownerWallet: VALID_OWNER,
     source: 'CLAIMABLE_POSITIONS',
     targetTokenA: 'So11111111111111111111111111111111111111112',
     targetTokenB: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
     distributionToken: 'So11111111111111111111111111111111111111112',
     swapConfig: { slippageBps: 50, maxPriceImpactBps: 500 },
     meteoraConfig: {
-      poolAddress: 'pool-address-test',
+      poolAddress: VALID_POOL,
       baseFee: 100,
       priceRange: null,
       lockMode: 'PERMANENT',
@@ -211,7 +215,7 @@ function createTestConfig(overrides?: Partial<EngineConfig>): EngineConfig {
       liquidity: { toString: () => '1000000' },
     })),
     findPoolsForPair: vi.fn(async () => [
-      { publicKey: { toString: () => 'pool-address-test' } },
+      { publicKey: new PublicKey(VALID_POOL) },
     ]),
     getDepositQuote: vi.fn(async () => ({
       liquidityDelta: { toString: () => '5000000' },
@@ -233,15 +237,25 @@ function createTestConfig(overrides?: Partial<EngineConfig>): EngineConfig {
       })),
     })),
     fetchPositionState: vi.fn(async () => ({
-      pool: { toString: () => 'pool-address-test' },
-      owner: { toString: () => 'owner-wallet-test' },
+      pool: new PublicKey(VALID_POOL),
+      owner: new PublicKey(VALID_OWNER),
       unlockedLiquidity: { toString: () => '5000000' },
       permanentLockedLiquidity: { toString: () => '0' },
     })),
   } as unknown as MeteoraClient;
 
   // Mock HeliusClient
-  const heliusClient = {} as unknown as HeliusClient;
+  const heliusClient = {
+    getConnection: vi.fn(() => ({
+      getTokenAccountBalance: vi.fn(async () => ({
+        value: { amount: '1000000', decimals: 9, uiAmount: 0.001 },
+      })),
+      getLatestBlockhash: vi.fn(async () => ({
+        blockhash: '11111111111111111111111111111111',
+        lastValidBlockHeight: 1000,
+      })),
+    })),
+  } as unknown as HeliusClient;
 
   return {
     strategyService,
@@ -367,15 +381,15 @@ describe('Engine', () => {
   // ---------------------------------------------------------------
   describe('error handling', () => {
     it('transitions to FAILED when a phase throws', async () => {
+      const config = createTestConfig();
       const failingBagsClient = {
-        ...createTestConfig().bagsClient,
+        ...config.bagsClient,
         getTotalClaimableSol: vi.fn(async () => {
           throw new Error('API timeout');
         }),
       } as unknown as BagsClient;
 
-      const config = createTestConfig({ bagsClient: failingBagsClient });
-      const engine = new Engine(config);
+      const engine = new Engine({ ...config, bagsClient: failingBagsClient });
       const run = await engine.executeStrategy('test-strategy-id');
 
       expect(run.state).toBe('FAILED');
@@ -386,15 +400,15 @@ describe('Engine', () => {
     });
 
     it('records error in audit log', async () => {
+      const config = createTestConfig();
       const failingBagsClient = {
-        ...createTestConfig().bagsClient,
+        ...config.bagsClient,
         getTotalClaimableSol: vi.fn(async () => {
           throw new Error('Simulation failed: insufficient funds');
         }),
       } as unknown as BagsClient;
 
-      const config = createTestConfig({ bagsClient: failingBagsClient });
-      const engine = new Engine(config);
+      const engine = new Engine({ ...config, bagsClient: failingBagsClient });
       await engine.executeStrategy('test-strategy-id');
 
       const run = config.runService.getRun(
@@ -445,15 +459,10 @@ describe('Engine', () => {
       const activeRun = runService.createRun('test-strategy-id');
       runService.updateState(activeRun.runId, 'CLAIMING');
 
-      // Update strategy to point to the active run
-      const strategies = new Map<string, Strategy>();
-      strategies.set('test-strategy-id', seedStrategy(database, {
-        strategyId: 'test-strategy-id',
+      await config.strategyService.updateStrategy('test-strategy-id', {
         lastRunId: activeRun.runId,
-      }));
-
-      const strategyService = createMockStrategyService(strategies);
-      const engine = new Engine({ ...config, strategyService });
+      });
+      const engine = new Engine(config);
 
       await expect(engine.executeStrategy('test-strategy-id')).rejects.toThrow(ConcurrentRunError);
       await expect(engine.executeStrategy('test-strategy-id')).rejects.toThrow('already has an active run');
@@ -467,15 +476,10 @@ describe('Engine', () => {
       const completedRun = runService.createRun('test-strategy-id');
       runService.updateState(completedRun.runId, 'COMPLETE');
 
-      // Update strategy to point to the completed run
-      const strategies = new Map<string, Strategy>();
-      strategies.set('test-strategy-id', seedStrategy(database, {
-        strategyId: 'test-strategy-id',
+      await config.strategyService.updateStrategy('test-strategy-id', {
         lastRunId: completedRun.runId,
-      }));
-
-      const strategyService = createMockStrategyService(strategies);
-      const engine = new Engine({ ...config, strategyService });
+      });
+      const engine = new Engine(config);
 
       // Should not throw
       const run = await engine.executeStrategy('test-strategy-id');

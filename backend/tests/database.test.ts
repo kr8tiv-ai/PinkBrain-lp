@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Database } from '../src/services/Database.js';
+import { migrations } from '../src/services/migrations/index.js';
 
 let tempDir: string;
 
@@ -132,7 +133,7 @@ describe('Database', () => {
         db2.getDb().prepare('SELECT COUNT(*) as cnt FROM _migrations').get() as { cnt: number }
       ).cnt;
 
-      expect(count).toBe(1);
+      expect(count).toBe(migrations.length);
       db2.close();
     });
   });

@@ -21,12 +21,16 @@ import { RunNotFoundError } from '../../src/services/errors.js';
 // ---------------------------------------------------------------------------
 
 let tempDir: string;
+let database: Database | undefined;
+let service: RunService;
 
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), 'pinkbrain-run-test-'));
 });
 
 afterEach(() => {
+  database?.close();
+  database = undefined;
   if (existsSync(tempDir)) {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -68,16 +72,9 @@ function seedStrategy(db: Database, strategyId: string): void {
   );
 }
 
-let database: Database;
-let service: RunService;
-
 beforeEach(() => {
   database = new Database({ dbPath: dbPath() });
   database.init();
-});
-
-afterEach(() => {
-  database.close();
 });
 
 // ---------------------------------------------------------------------------

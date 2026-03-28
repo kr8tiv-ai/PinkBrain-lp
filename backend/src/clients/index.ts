@@ -21,8 +21,9 @@ export type {
   PoolState,
   PositionState,
   DepositQuote,
-  PoolInfo,
-} from './MeteoraClient.js';
+} from '../types/index.js';
+
+export type { PoolInfo } from './MeteoraClient.js';
 
 export type {
   HeliusConfig,

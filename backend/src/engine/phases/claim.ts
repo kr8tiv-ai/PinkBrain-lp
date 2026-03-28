@@ -4,7 +4,8 @@
  */
 
 import type { PhaseContext, ClaimPhaseResult } from '../types.js';
-import type { ClaimablePosition } from '../../types/index.js';
+
+const LAMPORTS_PER_SOL = 1_000_000_000;
 
 /**
  * Execute the claim phase of a compounding run.
@@ -15,16 +16,15 @@ import type { ClaimablePosition } from '../../types/index.js';
  * 4. Otherwise, get claim transactions and send them via TransactionSender.
  */
 export async function executeClaimPhase(ctx: PhaseContext): Promise<ClaimPhaseResult> {
-  const { strategy, run, bagsClient, sender } = ctx;
+  const { strategy, bagsClient, sender } = ctx;
   const wallet = strategy.ownerWallet;
-  const tokenMint = strategy.targetTokenA; // Position base mint
 
   // 1. Get total claimable
   const { totalLamports, positions } = await bagsClient.getTotalClaimableSol(wallet);
   const claimableAmount = Number(totalLamports);
 
   // 2. Threshold check
-  const thresholdLamports = strategy.minCompoundThreshold;
+  const thresholdLamports = Math.floor(strategy.minCompoundThreshold * LAMPORTS_PER_SOL);
   if (claimableAmount < thresholdLamports) {
     return {
       claimableAmount,
@@ -39,7 +39,7 @@ export async function executeClaimPhase(ctx: PhaseContext): Promise<ClaimPhaseRe
 
   for (const position of positions) {
     if (BigInt(position.totalClaimableLamportsUserShare || 0) > 0n) {
-      const claimTxs = await bagsClient.getClaimTransactions(wallet, position.baseMint);
+      const claimTxs = await bagsClient.getClaimTransactions(wallet, position);
 
       for (const claimTx of claimTxs) {
         const result = await sender.signAndSendTransaction(claimTx.tx);

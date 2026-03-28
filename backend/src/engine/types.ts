@@ -5,6 +5,7 @@
  * implements this; tests mock it.
  */
 
+import type { Signer } from '@solana/web3.js';
 import type { Strategy, CompoundingRun } from '../types/index.js';
 import type { BagsClient } from '../clients/BagsClient.js';
 import type { MeteoraClient } from '../clients/MeteoraClient.js';
@@ -23,8 +24,16 @@ import type { Database } from '../services/Database.js';
  * The Bags Agent runtime provides the real implementation;
  * tests provide mocks.
  */
+export interface SendTransactionOptions {
+  extraSigners?: Signer[];
+  skipPreflight?: boolean;
+}
+
 export interface TransactionSender {
-  signAndSendTransaction(tx: string): Promise<{ signature: string }>;
+  signAndSendTransaction(
+    tx: string,
+    options?: SendTransactionOptions,
+  ): Promise<{ signature: string }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +71,8 @@ export interface SwapPhaseResult {
 
 export interface LiquidityPhaseResult {
   positionNft: string;
+  positionAddress?: string;
+  positionNftAccount?: string;
   liquidityDelta: string;
   txSignature: string;
 }

@@ -18,6 +18,7 @@ interface BagsAuthState {
   walletAddress: string | null;
   agent: BagsAgent | null;
   loading: boolean;
+  error: string | null;
 }
 
 /** Check if we're inside an iframe (likely Bags App Store) */
@@ -27,6 +28,23 @@ function isInIframe(): boolean {
   } catch {
     return true; // cross-origin iframe blocks access
   }
+}
+
+function getParentOrigin(): string | null {
+  const configured = import.meta.env.VITE_BAGS_PARENT_ORIGIN;
+  if (configured) {
+    return configured;
+  }
+
+  if (document.referrer) {
+    try {
+      return new URL(document.referrer).origin;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -45,8 +63,12 @@ function createBagsProxy(): BagsAgent | null {
 
   let messageId = 0;
   const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+  const targetOrigin = getParentOrigin();
 
-  window.addEventListener('message', (event) => {
+  const onMessage = (event: MessageEvent) => {
+    if (targetOrigin && event.origin !== targetOrigin) {
+      return;
+    }
     if (event.data?.type === 'bags:response' && typeof event.data.id === 'number') {
       const p = pending.get(event.data.id);
       if (p) {
@@ -58,13 +80,18 @@ function createBagsProxy(): BagsAgent | null {
         }
       }
     }
-  });
+  };
+
+  window.addEventListener('message', onMessage);
 
   function rpc(method: string, params?: unknown): Promise<any> {
     return new Promise((resolve, reject) => {
       const id = ++messageId;
       pending.set(id, { resolve, reject });
-      window.parent.postMessage({ type: 'bags:request', id, method, params }, '*');
+      window.parent.postMessage(
+        { type: 'bags:request', id, method, params },
+        targetOrigin ?? '*',
+      );
       // Timeout after 30 seconds
       setTimeout(() => {
         if (pending.has(id)) {
@@ -87,20 +114,31 @@ export function useBagsAuth(): BagsAuthState {
     walletAddress: null,
     agent: null,
     loading: true,
+    error: null,
   });
 
   useEffect(() => {
     const agent = createBagsProxy();
     if (!agent) {
-      setState({ isInBags: false, walletAddress: null, agent: null, loading: false });
+      setState({
+        isInBags: false,
+        walletAddress: null,
+        agent: null,
+        loading: false,
+        error: null,
+      });
       return;
     }
 
-    setState((s) => ({ ...s, isInBags: true, agent, loading: true }));
+    setState((s) => ({ ...s, isInBags: true, agent, loading: true, error: null }));
 
     agent.getWalletAddress()
       .then((addr) => setState((s) => ({ ...s, walletAddress: addr, loading: false })))
-      .catch(() => setState((s) => ({ ...s, loading: false })));
+      .catch((error) => setState((s) => ({
+        ...s,
+        loading: false,
+        error: error instanceof Error ? error.message : 'Unable to connect to Bags wallet',
+      })));
   }, []);
 
   return state;

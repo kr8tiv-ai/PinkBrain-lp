@@ -37,6 +37,20 @@ export interface TxBuilder {
   build?(): Promise<VersionedTransaction>;
 }
 
+function asTxBuilder(value: unknown): TxBuilder {
+  if (value && typeof value === 'object' && 'transaction' in value) {
+    return value as TxBuilder;
+  }
+
+  if (value instanceof Transaction) {
+    return {
+      transaction: async () => value,
+    };
+  }
+
+  throw new Error('SDK did not return a transaction builder');
+}
+
 /**
  * Pool info returned by getAllPools
  */
@@ -245,19 +259,19 @@ export class MeteoraClient {
     }, 'Fetching position state');
     
     try {
-      const positionState = await this.cpAmm.fetchPositionState(positionAddress);
+      const positionState = await this.cpAmm.fetchPositionState(positionAddress) as unknown as PositionState;
       
       this.logger.info({
         operation,
         positionAddress: params.positionAddress,
         pool: positionState.pool.toString(),
-        owner: positionState.owner.toString(),
-        liquidity: positionState.liquidity.toString(),
+        owner: positionState.owner?.toString(),
+        liquidity: positionState.liquidity?.toString(),
         unlockedLiquidity: positionState.unlockedLiquidity.toString(),
-        permanentLockedLiquidity: positionState.permanentLockedLiquidity.toString(),
+        permanentLockedLiquidity: positionState.permanentLockedLiquidity?.toString(),
       }, 'Successfully fetched position state');
       
-      return positionState as unknown as PositionState;
+      return positionState;
     } catch (error) {
       this.logger.error({
         operation,
@@ -438,7 +452,7 @@ export class MeteoraClient {
         ...logParams,
       }, 'Successfully created position transaction builder');
       
-      return txBuilder as TxBuilder;
+      return asTxBuilder(txBuilder);
     } catch (error) {
       this.logger.error({
         operation,
@@ -491,7 +505,7 @@ export class MeteoraClient {
         ...logParams,
       }, 'Successfully created add liquidity transaction builder');
       
-      return txBuilder as TxBuilder;
+      return asTxBuilder(txBuilder);
     } catch (error) {
       this.logger.error({
         operation,
@@ -541,7 +555,7 @@ export class MeteoraClient {
         ...logParams,
       }, 'Successfully created permanent lock transaction builder');
       
-      return txBuilder as TxBuilder;
+      return asTxBuilder(txBuilder);
     } catch (error) {
       this.logger.error({
         operation,
@@ -639,7 +653,7 @@ export class MeteoraClient {
       }
       
       // Validation: Verify owner matches
-      if (positionState.owner.toString() !== params.owner.toString()) {
+      if (positionState.owner && positionState.owner.toString() !== params.owner.toString()) {
         this.logger.error({
           operation,
           position: params.position.toString(),
@@ -671,11 +685,11 @@ export class MeteoraClient {
       this.logger.info({
         operation,
         ...logParams,
-        tokenAFees: positionState.tokenAFees.toString(),
-        tokenBFees: positionState.tokenBFees.toString(),
+        tokenAFees: positionState.tokenAFees?.toString() ?? '0',
+        tokenBFees: positionState.tokenBFees?.toString() ?? '0',
       }, 'Successfully created claim fee transaction builder');
       
-      return txBuilder as TxBuilder;
+      return asTxBuilder(txBuilder);
     } catch (error) {
       // Re-throw MeteoraClientError as-is
       if (error instanceof MeteoraClientError) {
@@ -766,7 +780,7 @@ export class MeteoraClient {
         tokenAProgram: params.tokenAProgram || new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
         tokenBProgram: params.tokenBProgram || new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
         isLockLiquidity: params.isLockLiquidity || false,
-      });
+      } as any);
       
       this.logger.info({
         operation,
@@ -805,7 +819,7 @@ export class MeteoraClient {
    * Check if a position is fully locked
    */
   isPositionLocked(position: PositionState): boolean {
-    return position.permanentLockedLiquidity.gt(new BN(0));
+    return (position.permanentLockedLiquidity ?? new BN(0)).gt(new BN(0));
   }
 
   /**
