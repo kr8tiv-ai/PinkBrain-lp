@@ -23,8 +23,17 @@ import {
   parseTradeQuote,
 } from './bags-schemas.js';
 import { BagsRateLimiter } from './BagsRateLimiter.js';
+import { CircuitBreaker } from './CircuitBreaker.js';
 
 type QueryValue = string | number | boolean;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientError(status: number): boolean {
+  return status === 502 || status === 503 || status === 504;
+}
 
 interface WrappedSuccess<T> {
   success: true;
@@ -69,6 +78,7 @@ export class BagsClient implements BagsAdapter {
   private readonly config: BagsApiConfig;
   private readonly sdk: BagsSDK | null;
   private readonly rateLimiter: BagsRateLimiter;
+  private readonly circuitBreaker: CircuitBreaker;
   private rateLimitInfo: BagsRateLimitInfo = {
     remaining: 1000,
     resetAt: 0,
@@ -78,6 +88,11 @@ export class BagsClient implements BagsAdapter {
     this.config = config;
     this.sdk = config.connection ? new BagsSDK(config.apiKey, config.connection, 'confirmed') : null;
     this.rateLimiter = new BagsRateLimiter(`${config.baseUrl}|${config.apiKey}`);
+    this.circuitBreaker = new CircuitBreaker({
+      name: 'bags-api',
+      failureThreshold: 5,
+      resetTimeoutMs: 30_000,
+    });
   }
 
   private getBaseUrl(): string {
@@ -101,9 +116,20 @@ export class BagsClient implements BagsAdapter {
     body?: unknown;
     priority?: BagsRequestPriority;
   }): Promise<T> {
-    const priority = params.priority ?? 'low';
+    return this.circuitBreaker.execute(() => this.requestWithRetry<T>(params));
+  }
 
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+  private async requestWithRetry<T>(params: {
+    method: 'GET' | 'POST';
+    endpoint: string;
+    query?: Record<string, QueryValue>;
+    body?: unknown;
+    priority?: BagsRequestPriority;
+  }): Promise<T> {
+    const priority = params.priority ?? 'low';
+    const maxAttempts = 3;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       await this.rateLimiter.acquire(priority);
 
       const response = await fetch(this.buildUrl(params.endpoint, params.query), {
@@ -119,7 +145,10 @@ export class BagsClient implements BagsAdapter {
       this.updateRateLimitFromHeaders(response.headers, response.status);
       const data = await response.json().catch(() => undefined);
 
-      if (response.status === 429 && attempt === 0) {
+      // Retry on rate limit or transient server errors with exponential backoff
+      if ((response.status === 429 || isTransientError(response.status)) && attempt < maxAttempts - 1) {
+        const delayMs = Math.min(1000 * 2 ** attempt, 8000);
+        await sleep(delayMs);
         continue;
       }
 
@@ -138,7 +167,7 @@ export class BagsClient implements BagsAdapter {
       return data as T;
     }
 
-    throw new Error('Bags API rate limit retry exhausted');
+    throw new Error('Bags API retry exhausted');
   }
 
   private updateRateLimitFromHeaders(headers: Headers, status?: number): void {
@@ -302,6 +331,11 @@ export class BagsClient implements BagsAdapter {
 
   getRateLimitStatus(): BagsRateLimitInfo {
     return { ...this.rateLimitInfo };
+  }
+
+  getCircuitBreakerState(): { state: string; failures: number } {
+    const s = this.circuitBreaker.getState();
+    return { state: s.state, failures: s.failures };
   }
 
   getSdk(): BagsSDK | null {

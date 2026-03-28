@@ -121,6 +121,17 @@ export async function createServer(ctx: ApiContext) {
     });
   });
 
+  // Structured request/response logging (skip noisy health checks)
+  app.addHook('onResponse', async (request, reply) => {
+    if (request.url === '/api/health') return;
+    app.log.info({
+      method: request.method,
+      url: request.url,
+      statusCode: reply.statusCode,
+      responseTimeMs: Math.round(reply.elapsedTime),
+    }, 'request completed');
+  });
+
   registerHealthRoutes(app, ctx);
   registerStrategyRoutes(app, ctx);
   registerRunRoutes(app, ctx);

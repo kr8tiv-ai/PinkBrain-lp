@@ -21,6 +21,7 @@ import { ExecutionPolicy } from './engine/ExecutionPolicy.js';
 import { createRunService } from './engine/RunService.js';
 import { createScheduler } from './engine/Scheduler.js';
 import type { EngineConfig } from './engine/types.js';
+import { BackupService } from './services/BackupService.js';
 import { Database } from './services/Database.js';
 import { HealthService } from './services/HealthService.js';
 import { createLoggerOptions } from './services/logger.js';
@@ -111,7 +112,17 @@ async function main() {
     db,
     config,
     healthService,
+    bagsClient,
   });
+
+  // Database backups — every 6 hours, retain last 7
+  const backupDir = process.env.BACKUP_DIR || resolve(process.cwd(), 'data', 'backups');
+  const backupService = new BackupService(db, dbPath, {
+    backupDir,
+    maxBackups: 7,
+  });
+  backupService.startScheduled(6 * 60 * 60 * 1000);
+  log.info({ backupDir }, 'Backup service started (6h interval)');
 
   await app.listen({ port, host });
   log.info({ port, host }, 'API server listening');
@@ -121,6 +132,7 @@ async function main() {
 
   const shutdown = async () => {
     log.info('Shutting down');
+    backupService.stop();
     scheduler.stop();
     await app.close();
     db.close();

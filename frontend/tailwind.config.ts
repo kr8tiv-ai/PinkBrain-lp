@@ -12,6 +12,15 @@ export default {
           700: '#be185d',
         },
       },
+      keyframes: {
+        'slide-in': {
+          from: { transform: 'translateX(100%)', opacity: '0' },
+          to: { transform: 'translateX(0)', opacity: '1' },
+        },
+      },
+      animation: {
+        'slide-in': 'slide-in 0.2s ease-out',
+      },
     },
   },
   plugins: [],

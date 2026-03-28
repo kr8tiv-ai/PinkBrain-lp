@@ -98,7 +98,7 @@ function createBagsProxy(): BagsAgent | null {
       pending.set(id, { resolve, reject });
       window.parent.postMessage(
         { type: 'bags:request', id, method, params },
-        targetOrigin,
+        targetOrigin!,
       );
       // Timeout after 30 seconds
       setTimeout(() => {

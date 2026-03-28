@@ -10,6 +10,7 @@ import type { Scheduler } from '../engine/Scheduler.js';
 import type { Database } from '../services/Database.js';
 import type { Config } from '../config/index.js';
 import type { HealthService } from '../services/HealthService.js';
+import type { BagsClient } from '../clients/BagsClient.js';
 
 export interface ApiContext {
   strategyService: StrategyService;
@@ -20,4 +21,5 @@ export interface ApiContext {
   db: Database;
   config: Config;
   healthService: HealthService;
+  bagsClient?: BagsClient;
 }
