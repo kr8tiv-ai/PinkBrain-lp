@@ -303,6 +303,24 @@ describe('RunService', () => {
       expect(runs[1].runId).toBe(r1.runId);
     });
 
+    it('breaks timestamp ties by insertion order so newest rows stay first', () => {
+      seedStrategy(database, 'strat-alpha');
+      service = createRunService(database);
+
+      const r1 = service.createRun('strat-alpha');
+      const r2 = service.createRun('strat-alpha');
+      const tiedTimestamp = '2026-03-27T00:00:00.000Z';
+
+      database.getDb()
+        .prepare('UPDATE runs SET started_at = ? WHERE id IN (?, ?)')
+        .run(tiedTimestamp, r1.runId, r2.runId);
+
+      const runs = service.getRunsByStrategyId('strat-alpha');
+
+      expect(runs[0].runId).toBe(r2.runId);
+      expect(runs[1].runId).toBe(r1.runId);
+    });
+
     it('returns empty array for strategy with no runs', () => {
       service = createRunService(database);
       expect(service.getRunsByStrategyId('nonexistent')).toEqual([]);

@@ -3,6 +3,12 @@
  */
 
 export { BagsClient, createBagsClient } from './BagsClient.js';
+export { createBagsAgentClient } from './BagsAgentClient.js';
+export type {
+  BagsAgentClient,
+  BagsAgentAuthInitResult,
+  BagsAgentAuthLoginResult,
+} from './BagsAgentClient.js';
 export type { BagsAdapter, BagsRequestOptions, BagsRequestPriority } from './BagsAdapter.js';
 export { MeteoraClient, createMeteoraClient, DAMM_V2_PROGRAM_ID, MIN_SQRT_PRICE, MAX_SQRT_PRICE } from './MeteoraClient.js';
 export { HeliusClient, createHeliusClient } from './HeliusClient.js';

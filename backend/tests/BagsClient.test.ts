@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BagsClient, createBagsClient } from '../src/clients/BagsClient.js';
+import { BagsRateLimiter } from '../src/clients/BagsRateLimiter.js';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -14,6 +15,7 @@ describe('BagsClient', () => {
   let client: BagsClient;
 
   beforeEach(() => {
+    BagsRateLimiter.resetAll();
     client = createBagsClient('test-api-key', 'https://test-api.bags.fm/api/v1');
     mockFetch.mockReset();
   });
@@ -256,6 +258,36 @@ describe('BagsClient', () => {
       const elapsed = Date.now() - start;
 
       expect(elapsed).toBeLessThan(900);
+    });
+
+    it('should share quota state across client instances', async () => {
+      const clientB = createBagsClient('test-api-key', 'https://test-api.bags.fm/api/v1');
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+        headers: new Headers({
+          'X-RateLimit-Remaining': '50',
+          'X-RateLimit-Reset': String(Math.floor(Date.now() / 1000) + 1),
+        }),
+      });
+
+      await client.getClaimablePositions('test-wallet');
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+        headers: new Headers({
+          'X-RateLimit-Remaining': '1000',
+          'X-RateLimit-Reset': String(Math.floor(Date.now() / 1000) + 3600),
+        }),
+      });
+
+      const start = Date.now();
+      await clientB.getClaimablePositions('test-wallet');
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeGreaterThanOrEqual(900);
     });
   });
 });

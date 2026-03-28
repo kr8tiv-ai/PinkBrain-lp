@@ -20,6 +20,9 @@ function createConfig(overrides?: Partial<Config>): Config {
     feeThresholdSol: 7,
     apiAuthToken: 'api-token',
     corsOrigins: ['http://localhost:5173'],
+    bagsAgentUsername: '',
+    bagsAgentJwt: '',
+    bagsAgentWalletAddress: '',
     signerPrivateKey: 'signer-key',
     dryRun: false,
     executionKillSwitch: false,
@@ -58,6 +61,7 @@ describe('HealthService', () => {
     expect(snapshot.runtime.dryRun).toBe(false);
     expect(snapshot.dependencies.database.status).toBe('ok');
     expect(snapshot.dependencies.signer.status).toBe('configured');
+    expect(snapshot.dependencies.signer.source).toBe('private-key');
   });
 
   it('degrades health when execution is live but no signer is configured', () => {
@@ -73,5 +77,26 @@ describe('HealthService', () => {
 
     expect(snapshot.status).toBe('degraded');
     expect(snapshot.dependencies.signer.status).toBe('missing');
+  });
+
+  it('reports Bags agent-backed signing when configured', () => {
+    const service = new HealthService(database, createConfig({
+      signerPrivateKey: '',
+      bagsAgentUsername: 'pinkbrain',
+      bagsAgentJwt: 'jwt-token',
+      bagsAgentWalletAddress: 'wallet-a',
+    }), {
+      signerSource: 'bags-agent',
+      resolvedAgentWalletAddress: 'wallet-a',
+    });
+
+    const snapshot = service.getSnapshot({
+      scheduledStrategies: 1,
+      version: '0.1.0',
+    });
+
+    expect(snapshot.dependencies.agentAuth.status).toBe('configured');
+    expect(snapshot.dependencies.signer.status).toBe('configured');
+    expect(snapshot.dependencies.signer.source).toBe('bags-agent');
   });
 });

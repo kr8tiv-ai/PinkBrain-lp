@@ -9,6 +9,7 @@
 import { resolve } from 'node:path';
 import { Connection } from '@solana/web3.js';
 import { getConfig } from './config/index.js';
+import { createBagsAgentClient } from './clients/BagsAgentClient.js';
 import { createBagsClient } from './clients/BagsClient.js';
 import { createMeteoraClient } from './clients/MeteoraClient.js';
 import { createHeliusClient } from './clients/HeliusClient.js';
@@ -18,10 +19,10 @@ import { Engine } from './engine/Engine.js';
 import { ExecutionPolicy } from './engine/ExecutionPolicy.js';
 import { createRunService } from './engine/RunService.js';
 import { createScheduler } from './engine/Scheduler.js';
-import type { EngineConfig, TransactionSender } from './engine/types.js';
-import { createKeypairTransactionSender } from './services/KeypairTransactionSender.js';
+import type { EngineConfig } from './engine/types.js';
 import { Database } from './services/Database.js';
 import { HealthService } from './services/HealthService.js';
+import { resolveTransactionSender } from './services/resolveTransactionSender.js';
 import { createStrategyService } from './services/StrategyService.js';
 
 async function main() {
@@ -42,26 +43,21 @@ async function main() {
   const connection = new Connection(config.heliusRpcUrl, 'confirmed');
 
   const bagsClient = createBagsClient(config.bagsApiKey, config.bagsApiBaseUrl, connection);
+  const bagsAgentClient = createBagsAgentClient(config.bagsApiBaseUrl);
   const meteoraClient = createMeteoraClient(connection);
   const heliusClient = createHeliusClient({
     apiKey: config.heliusApiKey,
     rpcUrl: config.heliusRpcUrl,
   });
 
-  const fallbackSender: TransactionSender = {
-    signAndSendTransaction: async () => {
-      throw new Error('No transaction signer configured. Set SIGNER_PRIVATE_KEY.');
-    },
-  };
-  const sender = config.signerPrivateKey
-    ? createKeypairTransactionSender({
-        connection,
-        privateKey: config.signerPrivateKey,
-      })
-    : fallbackSender;
+  const signerResolution = await resolveTransactionSender(
+    config,
+    connection,
+    bagsAgentClient,
+  );
 
-  if (!config.signerPrivateKey) {
-    const message = 'SIGNER_PRIVATE_KEY is not set. Manual and scheduled runs will fail.';
+  if (signerResolution.source === 'none') {
+    const message = 'No live signer is configured. Set SIGNER_PRIVATE_KEY or Bags agent auth env vars.';
     if (config.nodeEnv === 'production') {
       throw new Error(message);
     }
@@ -81,7 +77,10 @@ async function main() {
     maxDailyRuns: config.maxDailyRuns,
     maxClaimableSolPerRun: config.maxClaimableSolPerRun,
   });
-  const healthService = new HealthService(db, config);
+  const healthService = new HealthService(db, config, {
+    signerSource: signerResolution.source,
+    resolvedAgentWalletAddress: signerResolution.resolvedWalletAddress,
+  });
 
   const engineConfig: EngineConfig = {
     strategyService,
@@ -90,7 +89,7 @@ async function main() {
     bagsClient,
     meteoraClient,
     heliusClient,
-    sender,
+    sender: signerResolution.sender,
     db,
     executionPolicy,
   };

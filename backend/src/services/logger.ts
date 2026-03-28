@@ -9,6 +9,7 @@ export function createLoggerOptions(config: Config): Record<string, unknown> {
         'req.headers.x-api-key',
         'config.apiAuthToken',
         'config.bagsApiKey',
+        'config.bagsAgentJwt',
         'config.heliusApiKey',
         'config.signerPrivateKey',
       ],

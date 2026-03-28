@@ -16,6 +16,10 @@ export interface BagsApiConfig {
   connection?: Connection;
 }
 
+export interface BagsAgentConfig {
+  baseUrl: string;
+}
+
 export interface BagsRateLimitInfo {
   remaining: number;
   resetAt: number; // Unix timestamp in seconds

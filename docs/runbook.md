@@ -34,7 +34,10 @@ Copy [.env.example](/C:/Users/lucid/.config/superpowers/worktrees/pinkbrain-lp-g
 - `BAGS_API_KEY`
 - `HELIUS_API_KEY` or `HELIUS_RPC_URL`
 - `API_AUTH_TOKEN` for protected backend routes
-- `SIGNER_PRIVATE_KEY` for live backend execution
+- either `SIGNER_PRIVATE_KEY` or the Bags Agent trio:
+  - `BAGS_AGENT_USERNAME`
+  - `BAGS_AGENT_JWT`
+  - `BAGS_AGENT_WALLET_ADDRESS`
 
 Key runtime toggles:
 
@@ -78,9 +81,11 @@ Optional envs for deeper checks:
 Recommended order:
 
 1. run smoke with only config present
-2. run smoke with `SMOKE_WALLET`
-3. run smoke with quote envs
-4. only then move to scheduled/manual execution
+2. if you are using Bags Agent signing, run `npm run agent -w backend -- wallet list --token <jwt>`
+3. run smoke with `SMOKE_WALLET`
+4. run smoke with quote envs
+5. optionally set `SMOKE_EXPORT_AGENT_SIGNER=true` to verify the agent wallet export path without printing the full secret
+6. only then move to scheduled/manual execution
 
 ## 5. Safe Bring-Up Sequence
 
@@ -95,12 +100,25 @@ Recommended bring-up for a fresh environment:
 7. review audit logs and run state transitions
 8. only then provide a live signer and disable dry-run
 
+### Bags Agent onboarding
+
+The repository now includes a helper CLI for the public agent auth flow:
+
+```powershell
+npm run agent -w backend -- auth init --username your_agent_username
+npm run agent -w backend -- auth login --public-identifier <uuid> --secret <secret> --post-id <moltbook_post_id> --env
+npm run agent -w backend -- wallet list --token <jwt>
+npm run agent -w backend -- wallet export --token <jwt> --wallet <wallet_address> --env
+```
+
+Default output is redacted. Use `--env` or `--raw-*` only when intentionally setting secrets.
+
 ## 6. Live Mode Preconditions
 
 Do not enable live mode unless all of the following are true:
 
 - `DRY_RUN=false`
-- `SIGNER_PRIVATE_KEY` is configured
+- either `SIGNER_PRIVATE_KEY` is configured or Bags Agent export is configured with `BAGS_AGENT_JWT` plus a resolvable wallet
 - `API_AUTH_TOKEN` is configured
 - `/api/health` shows `executionMode: "live"`
 - Bags and Helius credentials are valid
@@ -179,6 +197,8 @@ The Bags client now distinguishes high-priority versus low-priority requests. Cr
 - execution-time requests tied directly to an active run
 
 Avoid noisy background polling when remaining Bags quota is low.
+
+Multiple Bags client instances now coordinate through a shared in-process limiter so smoke tests, API requests, and engine execution do not burn quota independently.
 
 ## 12. Embedded-Mode Expectations
 

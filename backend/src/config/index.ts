@@ -29,6 +29,11 @@ export interface Config {
   apiAuthToken: string;
   corsOrigins: string[];
 
+  // Bags Agent auth
+  bagsAgentUsername: string;
+  bagsAgentJwt: string;
+  bagsAgentWalletAddress: string;
+
   // Signing
   signerPrivateKey: string;
 
@@ -109,6 +114,11 @@ export function loadConfig(): Config {
     // API protection / browser access
     apiAuthToken: getEnv('API_AUTH_TOKEN', ''),
     corsOrigins,
+
+    // Bags Agent auth
+    bagsAgentUsername: getEnv('BAGS_AGENT_USERNAME', ''),
+    bagsAgentJwt: getEnv('BAGS_AGENT_JWT', ''),
+    bagsAgentWalletAddress: getEnv('BAGS_AGENT_WALLET_ADDRESS', ''),
 
     // Signing
     signerPrivateKey: getEnv('SIGNER_PRIVATE_KEY', ''),

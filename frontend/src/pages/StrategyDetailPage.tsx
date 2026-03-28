@@ -1,5 +1,14 @@
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Play, Pause, ExternalLink, RotateCw, AlertTriangle, FlaskConical, Shield } from 'lucide-react';
+import {
+  ArrowLeft,
+  Play,
+  Pause,
+  ExternalLink,
+  RotateCw,
+  AlertTriangle,
+  FlaskConical,
+  Shield,
+} from 'lucide-react';
 import { useStrategy, usePauseStrategy, useResumeStrategy, useTriggerRun } from '../api/strategies';
 import { useRuns, useRunLogs } from '../api/runs';
 import { useHealth } from '../api/health';
@@ -13,15 +22,15 @@ import type { AuditEntry } from '../types/strategy';
 
 function AuditLogPanel({ runId }: { runId: string }) {
   const { data: logs, isLoading } = useRunLogs(runId);
-  if (isLoading) return <div className="text-xs text-gray-500 py-2">Loading logs...</div>;
-  if (!logs || logs.length === 0) return <div className="text-xs text-gray-500 py-2">No audit entries</div>;
+  if (isLoading) return <div className="py-2 text-xs text-gray-500">Loading logs...</div>;
+  if (!logs || logs.length === 0) return <div className="py-2 text-xs text-gray-500">No audit entries</div>;
 
   return (
-    <div className="mt-2 border-t border-gray-800 pt-2 space-y-1">
+    <div className="mt-2 space-y-1 border-t border-gray-800 pt-2">
       {logs.map((entry: AuditEntry) => (
         <div key={entry.id} className="flex items-start gap-2 text-xs">
-          <span className="text-gray-600 shrink-0">{formatDate(entry.timestamp)}</span>
-          <span className="text-gray-400 font-medium">{entry.action}</span>
+          <span className="shrink-0 text-gray-600">{formatDate(entry.timestamp)}</span>
+          <span className="font-medium text-gray-400">{entry.action}</span>
           {entry.txSignature && <TxLink signature={entry.txSignature} />}
         </div>
       ))}
@@ -48,18 +57,18 @@ export function StrategyDetailPage() {
   return (
     <div className="space-y-6">
       <Link to="/" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-200">
-        <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+        <ArrowLeft className="h-4 w-4" /> Back to Dashboard
       </Link>
 
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
+          <h1 className="flex items-center gap-2 text-xl font-bold">
             <span className="font-mono">{truncateAddress(strategy.targetTokenA)}</span>
             <span className="text-gray-500">/</span>
             <span className="font-mono">{truncateAddress(strategy.targetTokenB)}</span>
             <Badge status={strategy.status} />
           </h1>
-          <p className="text-xs text-gray-500 mt-1">ID: {strategy.strategyId}</p>
+          <p className="mt-1 text-xs text-gray-500">ID: {strategy.strategyId}</p>
         </div>
         <div className="flex items-center gap-2">
           {strategy.status === 'ACTIVE' ? (
@@ -69,7 +78,7 @@ export function StrategyDetailPage() {
               onClick={() => pauseMut.mutate(strategy.strategyId)}
               disabled={pauseMut.isPending}
             >
-              <Pause className="w-3.5 h-3.5" /> Pause
+              <Pause className="h-3.5 w-3.5" /> Pause
             </Button>
           ) : (
             <Button
@@ -78,7 +87,7 @@ export function StrategyDetailPage() {
               onClick={() => resumeMut.mutate(strategy.strategyId)}
               disabled={resumeMut.isPending}
             >
-              <Play className="w-3.5 h-3.5" /> Resume
+              <Play className="h-3.5 w-3.5" /> Resume
             </Button>
           )}
           <Button
@@ -86,7 +95,7 @@ export function StrategyDetailPage() {
             onClick={() => triggerMut.mutate(strategy.strategyId)}
             disabled={triggerMut.isPending || executionBlocked}
           >
-            <RotateCw className={`w-3.5 h-3.5 ${triggerMut.isPending ? 'animate-spin' : ''}`} />
+            <RotateCw className={`h-3.5 w-3.5 ${triggerMut.isPending ? 'animate-spin' : ''}`} />
             {runButtonLabel}
           </Button>
         </div>
@@ -96,11 +105,11 @@ export function StrategyDetailPage() {
         <Card className={health.status === 'degraded' ? 'border-orange-500/30 bg-orange-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h3 className="text-sm font-semibold flex items-center gap-2">
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
                 {health.status === 'degraded' ? (
-                  <AlertTriangle className="w-4 h-4 text-orange-300" />
+                  <AlertTriangle className="h-4 w-4 text-orange-300" />
                 ) : (
-                  <Shield className="w-4 h-4 text-emerald-300" />
+                  <Shield className="h-4 w-4 text-emerald-300" />
                 )}
                 Runtime Status
               </h3>
@@ -114,24 +123,44 @@ export function StrategyDetailPage() {
                   Live signer configuration is missing. Keep the backend in dry-run mode until a signing path is available.
                 </p>
               )}
+              {health.dependencies.agentAuth.status === 'partial' && (
+                <p className="mt-2 text-xs text-orange-200/80">
+                  Bags Agent auth is only partially configured. Set both the JWT and a resolvable wallet before relying on agent-backed execution.
+                </p>
+              )}
             </div>
             <div className="grid gap-2 text-xs sm:grid-cols-2 lg:min-w-[24rem]">
               <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
                 <div className="flex items-center gap-2 font-medium text-white">
-                  <FlaskConical className="w-3.5 h-3.5 text-pink-300" />
+                  <FlaskConical className="h-3.5 w-3.5 text-pink-300" />
                   Execution
                 </div>
-                <p className="mt-1 text-gray-300">
-                  {health.runtime.executionMode}
-                </p>
+                <p className="mt-1 text-gray-300">{health.runtime.executionMode}</p>
               </div>
               <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
                 <div className="flex items-center gap-2 font-medium text-white">
-                  <Shield className="w-3.5 h-3.5 text-pink-300" />
+                  <Shield className="h-3.5 w-3.5 text-pink-300" />
                   Controls
                 </div>
                 <p className="mt-1 text-gray-300">
-                  {health.runtime.apiAuthProtected ? 'API protected' : 'API open'} · signer {health.dependencies.signer.status}
+                  {health.runtime.apiAuthProtected ? 'API protected' : 'API open'} - signer {health.dependencies.signer.status} ({health.dependencies.signer.source})
+                </p>
+                {health.dependencies.agentAuth.status !== 'missing' && (
+                  <p className="mt-1 text-gray-400">
+                    Agent auth {health.dependencies.agentAuth.status}
+                    {health.dependencies.agentAuth.walletAddress ? ` - ${truncateAddress(health.dependencies.agentAuth.walletAddress)}` : ''}
+                  </p>
+                )}
+              </div>
+              <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+                <div className="flex items-center gap-2 font-medium text-white">
+                  <Shield className="h-3.5 w-3.5 text-pink-300" />
+                  Bags Agent
+                </div>
+                <p className="mt-1 text-gray-300">
+                  {health.dependencies.agentAuth.status === 'configured' && 'Configured for backend export'}
+                  {health.dependencies.agentAuth.status === 'partial' && 'Needs wallet selection or JWT'}
+                  {health.dependencies.agentAuth.status === 'missing' && 'Not configured'}
                 </p>
               </div>
             </div>
@@ -139,9 +168,9 @@ export function StrategyDetailPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
-          <h3 className="text-sm font-medium text-gray-400 mb-3">Configuration</h3>
+          <h3 className="mb-3 text-sm font-medium text-gray-400">Configuration</h3>
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between">
               <dt className="text-gray-500">Source</dt>
@@ -165,13 +194,13 @@ export function StrategyDetailPage() {
             </div>
             <div className="flex justify-between">
               <dt className="text-gray-500">Lock Mode</dt>
-              <dd className="text-orange-400 font-medium">PERMANENT</dd>
+              <dd className="font-medium text-orange-400">PERMANENT</dd>
             </div>
           </dl>
         </Card>
 
         <Card>
-          <h3 className="text-sm font-medium text-gray-400 mb-3">Pool Info</h3>
+          <h3 className="mb-3 text-sm font-medium text-gray-400">Pool Info</h3>
           <dl className="space-y-2 text-sm">
             {strategy.meteoraConfig.poolAddress ? (
               <div className="flex justify-between">
@@ -181,10 +210,10 @@ export function StrategyDetailPage() {
                     href={accountUrl(strategy.meteoraConfig.poolAddress)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-pink-400 hover:text-pink-300 inline-flex items-center gap-1"
+                    className="inline-flex items-center gap-1 text-pink-400 hover:text-pink-300"
                   >
                     {truncateAddress(strategy.meteoraConfig.poolAddress)}
-                    <ExternalLink className="w-3 h-3" />
+                    <ExternalLink className="h-3 w-3" />
                   </a>
                 </dd>
               </div>
@@ -208,10 +237,10 @@ export function StrategyDetailPage() {
       </div>
 
       <div>
-        <h3 className="text-sm font-medium text-gray-400 mb-3">Run History</h3>
-        {loadingRuns && <div className="text-gray-500 text-sm">Loading runs...</div>}
+        <h3 className="mb-3 text-sm font-medium text-gray-400">Run History</h3>
+        {loadingRuns && <div className="text-sm text-gray-500">Loading runs...</div>}
         {runs && runs.length === 0 && (
-          <Card className="text-center py-8 text-gray-500 text-sm">
+          <Card className="py-8 text-center text-sm text-gray-500">
             No runs yet. Click "{runButtonLabel}" to trigger a compounding cycle.
           </Card>
         )}
@@ -220,7 +249,7 @@ export function StrategyDetailPage() {
             {runs.map((run) => (
               <Card key={run.runId}>
                 <div
-                  className="flex items-center justify-between cursor-pointer"
+                  className="flex cursor-pointer items-center justify-between"
                   onClick={() => setExpandedRun(expandedRun === run.runId ? null : run.runId)}
                 >
                   <div className="flex items-center gap-3">
@@ -236,9 +265,7 @@ export function StrategyDetailPage() {
                         Claimed: {run.claim.claimableAmount} SOL
                       </span>
                     )}
-                    {run.error && (
-                      <span className="text-red-400">{run.error.code}</span>
-                    )}
+                    {run.error && <span className="text-red-400">{run.error.code}</span>}
                   </div>
                 </div>
                 {expandedRun === run.runId && <AuditLogPanel runId={run.runId} />}

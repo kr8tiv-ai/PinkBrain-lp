@@ -18,7 +18,15 @@ export interface HealthSnapshot {
     database: { status: 'ok' | 'error' };
     bagsApi: { status: 'configured' | 'missing'; baseUrl: string };
     heliusRpc: { status: 'configured' | 'missing'; endpoint: string };
-    signer: { status: 'configured' | 'not-required' | 'missing' };
+    agentAuth: {
+      status: 'configured' | 'partial' | 'missing';
+      username: string | null;
+      walletAddress: string | null;
+    };
+    signer: {
+      status: 'configured' | 'not-required' | 'missing';
+      source: 'private-key' | 'bags-agent' | 'none';
+    };
   };
 }
 
@@ -26,6 +34,10 @@ export class HealthService {
   constructor(
     private readonly db: Database,
     private readonly config: Config,
+    private readonly runtime: {
+      signerSource: 'private-key' | 'bags-agent' | 'none';
+      resolvedAgentWalletAddress?: string | null;
+    } = { signerSource: 'none', resolvedAgentWalletAddress: null },
   ) {}
 
   getSnapshot(params: {
@@ -35,9 +47,16 @@ export class HealthService {
     const databaseStatus = this.getDatabaseStatus();
     const bagsApiStatus = this.config.bagsApiKey ? 'configured' : 'missing';
     const heliusStatus = this.config.heliusRpcUrl ? 'configured' : 'missing';
+    const agentStatus = this.getAgentStatus();
+    const signerSource =
+      this.runtime.signerSource !== 'none'
+        ? this.runtime.signerSource
+        : this.config.signerPrivateKey
+          ? 'private-key'
+          : 'none';
     const signerStatus = this.config.dryRun
       ? 'not-required'
-      : this.config.signerPrivateKey
+      : signerSource !== 'none'
         ? 'configured'
         : 'missing';
 
@@ -75,11 +94,36 @@ export class HealthService {
           status: heliusStatus,
           endpoint: this.config.heliusRpcUrl,
         },
+        agentAuth: {
+          status: agentStatus,
+          username: this.config.bagsAgentUsername || null,
+          walletAddress: (
+            this.runtime.resolvedAgentWalletAddress
+            ?? this.config.bagsAgentWalletAddress
+          ) || null,
+        },
         signer: {
           status: signerStatus,
+          source: signerSource,
         },
       },
     };
+  }
+
+  private getAgentStatus(): 'configured' | 'partial' | 'missing' {
+    const hasToken = Boolean(this.config.bagsAgentJwt);
+    const hasWallet = Boolean(this.config.bagsAgentWalletAddress || this.runtime.resolvedAgentWalletAddress);
+    const hasUsername = Boolean(this.config.bagsAgentUsername);
+
+    if (hasToken && hasWallet) {
+      return 'configured';
+    }
+
+    if (hasToken || hasUsername) {
+      return 'partial';
+    }
+
+    return 'missing';
   }
 
   private getDatabaseStatus(): 'ok' | 'error' {

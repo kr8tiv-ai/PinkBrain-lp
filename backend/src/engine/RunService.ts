@@ -106,7 +106,7 @@ export class RunService {
    */
   getRunsByStrategyId(strategyId: string): CompoundingRun[] {
     const rows = this.db.getDb()
-      .prepare('SELECT * FROM runs WHERE strategy_id = ? ORDER BY started_at DESC')
+      .prepare('SELECT * FROM runs WHERE strategy_id = ? ORDER BY started_at DESC, rowid DESC')
       .all(strategyId) as Record<string, unknown>[];
     return rows.map(rowToRun);
   }

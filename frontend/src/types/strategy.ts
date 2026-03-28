@@ -112,6 +112,14 @@ export interface HealthSnapshot {
     database: { status: 'ok' | 'error' };
     bagsApi: { status: 'configured' | 'missing'; baseUrl: string };
     heliusRpc: { status: 'configured' | 'missing'; endpoint: string };
-    signer: { status: 'configured' | 'not-required' | 'missing' };
+    agentAuth: {
+      status: 'configured' | 'partial' | 'missing';
+      username: string | null;
+      walletAddress: string | null;
+    };
+    signer: {
+      status: 'configured' | 'not-required' | 'missing';
+      source: 'private-key' | 'bags-agent' | 'none';
+    };
   };
 }

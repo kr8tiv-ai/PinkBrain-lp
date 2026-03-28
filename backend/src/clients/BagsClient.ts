@@ -22,6 +22,7 @@ import {
   parseSwapTransaction,
   parseTradeQuote,
 } from './bags-schemas.js';
+import { BagsRateLimiter } from './BagsRateLimiter.js';
 
 type QueryValue = string | number | boolean;
 
@@ -67,6 +68,7 @@ function extractErrorMessage(value: unknown, fallback: string): string {
 export class BagsClient implements BagsAdapter {
   private readonly config: BagsApiConfig;
   private readonly sdk: BagsSDK | null;
+  private readonly rateLimiter: BagsRateLimiter;
   private rateLimitInfo: BagsRateLimitInfo = {
     remaining: 1000,
     resetAt: 0,
@@ -75,6 +77,7 @@ export class BagsClient implements BagsAdapter {
   constructor(config: BagsApiConfig) {
     this.config = config;
     this.sdk = config.connection ? new BagsSDK(config.apiKey, config.connection, 'confirmed') : null;
+    this.rateLimiter = new BagsRateLimiter(`${config.baseUrl}|${config.apiKey}`);
   }
 
   private getBaseUrl(): string {
@@ -98,59 +101,53 @@ export class BagsClient implements BagsAdapter {
     body?: unknown;
     priority?: BagsRequestPriority;
   }): Promise<T> {
-    await this.waitForRateLimit(params.priority ?? 'low');
+    const priority = params.priority ?? 'low';
 
-    const response = await fetch(this.buildUrl(params.endpoint, params.query), {
-      method: params.method,
-      headers: {
-        'x-api-key': this.config.apiKey,
-        Authorization: `Bearer ${this.config.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: params.method === 'POST' ? JSON.stringify(params.body ?? {}) : undefined,
-    });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await this.rateLimiter.acquire(priority);
 
-    this.updateRateLimitFromHeaders(response.headers);
-    const data = await response.json().catch(() => undefined);
+      const response = await fetch(this.buildUrl(params.endpoint, params.query), {
+        method: params.method,
+        headers: {
+          'x-api-key': this.config.apiKey,
+          Authorization: `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: params.method === 'POST' ? JSON.stringify(params.body ?? {}) : undefined,
+      });
 
-    if (!response.ok) {
-      throw new Error(extractErrorMessage(data, `HTTP ${response.status}`));
-    }
+      this.updateRateLimitFromHeaders(response.headers, response.status);
+      const data = await response.json().catch(() => undefined);
 
-    if (isWrappedError(data)) {
-      throw new Error(extractErrorMessage(data, 'Bags API request failed'));
-    }
-
-    if (isWrappedSuccess<T>(data)) {
-      return data.response;
-    }
-
-    return data as T;
-  }
-
-  private updateRateLimitFromHeaders(headers: Headers): void {
-    const remaining = headers.get('X-RateLimit-Remaining');
-    const reset = headers.get('X-RateLimit-Reset');
-
-    if (remaining) {
-      this.rateLimitInfo.remaining = parseInt(remaining, 10);
-    }
-    if (reset) {
-      this.rateLimitInfo.resetAt = parseInt(reset, 10);
-    }
-  }
-
-  private async waitForRateLimit(priority: BagsRequestPriority): Promise<void> {
-    const reserveFloor = priority === 'high' ? 0 : 100;
-
-    if (this.rateLimitInfo.remaining <= reserveFloor) {
-      const now = Math.floor(Date.now() / 1000);
-      if (this.rateLimitInfo.resetAt > now) {
-        const waitTime = (this.rateLimitInfo.resetAt - now) * 1000;
-        await new Promise((resolve) => setTimeout(resolve, waitTime + 1000));
-        this.rateLimitInfo.remaining = 1000;
+      if (response.status === 429 && attempt === 0) {
+        continue;
       }
+
+      if (!response.ok) {
+        throw new Error(extractErrorMessage(data, `HTTP ${response.status}`));
+      }
+
+      if (isWrappedError(data)) {
+        throw new Error(extractErrorMessage(data, 'Bags API request failed'));
+      }
+
+      if (isWrappedSuccess<T>(data)) {
+        return data.response;
+      }
+
+      return data as T;
     }
+
+    throw new Error('Bags API rate limit retry exhausted');
+  }
+
+  private updateRateLimitFromHeaders(headers: Headers, status?: number): void {
+    this.rateLimiter.updateFromHeaders(headers, status);
+    const snapshot = this.rateLimiter.getSnapshot();
+    this.rateLimitInfo = {
+      remaining: snapshot.remaining,
+      resetAt: snapshot.resetAt,
+    };
   }
 
   async getClaimablePositions(
