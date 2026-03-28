@@ -12,19 +12,35 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // Mock bootstrapService before importing CLI
 // ---------------------------------------------------------------------------
 
-const mockCreate = vi.fn();
-const mockList = vi.fn();
-const mockGet = vi.fn();
-const mockUpdate = vi.fn();
-const mockDelete = vi.fn();
+const {
+  mockCreate,
+  mockList,
+  mockGet,
+  mockUpdate,
+  mockDelete,
+  mockService,
+} = vi.hoisted(() => {
+  const mockCreate = vi.fn();
+  const mockList = vi.fn();
+  const mockGet = vi.fn();
+  const mockUpdate = vi.fn();
+  const mockDelete = vi.fn();
 
-const mockService = {
-  createStrategy: mockCreate,
-  listStrategies: mockList,
-  getStrategy: mockGet,
-  updateStrategy: mockUpdate,
-  deleteStrategy: mockDelete,
-};
+  return {
+    mockCreate,
+    mockList,
+    mockGet,
+    mockUpdate,
+    mockDelete,
+    mockService: {
+      createStrategy: mockCreate,
+      listStrategies: mockList,
+      getStrategy: mockGet,
+      updateStrategy: mockUpdate,
+      deleteStrategy: mockDelete,
+    },
+  };
+});
 
 vi.mock('../src/services/Database.js', () => ({
   Database: vi.fn().mockImplementation(() => ({
@@ -69,7 +85,7 @@ vi.mock('../src/services/errors.js', () => ({
 
 // Import CLI after mocks are set up
 import { Command } from 'commander';
-import { registerStrategyCommands } from '../scripts/cli.js';
+import { registerStrategyCommands } from '../scripts/cli.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers

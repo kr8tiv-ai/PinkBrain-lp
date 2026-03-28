@@ -5,14 +5,13 @@
  * No UPDATE or DELETE operations — only INSERT and SELECT.
  */
 
-import type Database from 'better-sqlite3';
 import type { Migration } from './001_strategies.js';
 
 export const migration002: Migration = {
   version: 2,
   name: 'create_audit_log',
 
-  up(db: Database.Database): void {
+  up(db: { exec: (sql: string) => void }): void {
     db.exec(`
       CREATE TABLE IF NOT EXISTS audit_log (
         id             INTEGER PRIMARY KEY AUTOINCREMENT,

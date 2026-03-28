@@ -25,6 +25,13 @@ export interface Config {
   // Fee claiming threshold
   feeThresholdSol: number;
 
+  // API protection / browser access
+  apiAuthToken: string;
+  corsOrigins: string[];
+
+  // Signing
+  signerPrivateKey: string;
+
   // Environment
   nodeEnv: 'development' | 'production' | 'test';
   logLevel: 'debug' | 'info' | 'warn' | 'error';
@@ -56,6 +63,13 @@ function getEnvNumber(key: string, defaultValue?: number): number {
 export function loadConfig(): Config {
   const heliusApiKey = getEnv('HELIUS_API_KEY', '');
   const solanaNetwork = getEnv('SOLANA_NETWORK', 'mainnet-beta') as 'mainnet-beta' | 'devnet';
+  const corsOrigins = getEnv(
+    'CORS_ORIGINS',
+    'http://localhost:5173,http://localhost:3000,https://bags.fm,https://www.bags.fm',
+  )
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
   return {
     // Bags.fm API
@@ -76,6 +90,13 @@ export function loadConfig(): Config {
 
     // Fee claiming threshold (default: 7 SOL)
     feeThresholdSol: getEnvNumber('FEE_THRESHOLD_SOL', 7),
+
+    // API protection / browser access
+    apiAuthToken: getEnv('API_AUTH_TOKEN', ''),
+    corsOrigins,
+
+    // Signing
+    signerPrivateKey: getEnv('SIGNER_PRIVATE_KEY', ''),
 
     // Environment
     nodeEnv: (getEnv('NODE_ENV', 'development')) as Config['nodeEnv'],

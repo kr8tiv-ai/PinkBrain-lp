@@ -8,6 +8,7 @@ import type { AuditService } from '../engine/AuditService.js';
 import type { Engine } from '../engine/Engine.js';
 import type { Scheduler } from '../engine/Scheduler.js';
 import type { Database } from '../services/Database.js';
+import type { Config } from '../config/index.js';
 
 export interface ApiContext {
   strategyService: StrategyService;
@@ -16,4 +17,5 @@ export interface ApiContext {
   engine: Engine;
   scheduler: Scheduler;
   db: Database;
+  config: Config;
 }

@@ -1,17 +1,102 @@
 /**
  * SQLite Database wrapper with migration support.
  *
- * Usage:
- *   const db = new Database({ dbPath: './data/pinkbrain.db' });
- *   db.init();
- *   // ... use db.getDb() for queries
- *   db.close();
+ * Prefers better-sqlite3 in normal environments and falls back to node:sqlite
+ * when the native binding is unavailable locally.
  */
 
 import BetterSqlite3 from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { migrations } from './migrations/index.js';
+
+const nodeRequire = eval('require') as NodeJS.Require;
+
+export interface StatementLike {
+  run(...params: unknown[]): { changes?: number; lastInsertRowid?: unknown };
+  get<T = unknown>(...params: unknown[]): T;
+  all<T = unknown>(...params: unknown[]): T[];
+}
+
+export interface DatabaseConnection {
+  prepare(sql: string): StatementLike;
+  exec(sql: string): void;
+  pragma(sql: string): void;
+  transaction<T>(fn: () => T): () => T;
+  close(): void;
+}
+
+class BetterSqliteConnection implements DatabaseConnection {
+  constructor(private readonly db: BetterSqlite3.Database) {}
+
+  prepare(sql: string): StatementLike {
+    const statement = this.db.prepare(sql);
+    return {
+      run: (...params: unknown[]) => statement.run(...params),
+      get: <T = unknown>(...params: unknown[]) => statement.get(...params) as T,
+      all: <T = unknown>(...params: unknown[]) => statement.all(...params) as T[],
+    };
+  }
+
+  exec(sql: string): void {
+    this.db.exec(sql);
+  }
+
+  pragma(sql: string): void {
+    this.db.pragma(sql);
+  }
+
+  transaction<T>(fn: () => T): () => T {
+    return this.db.transaction(fn);
+  }
+
+  close(): void {
+    this.db.close();
+  }
+}
+
+class NodeSqliteConnection implements DatabaseConnection {
+  constructor(private readonly db: any) {}
+
+  prepare(sql: string): StatementLike {
+    const statement = this.db.prepare(sql);
+    return {
+      run: (...params: unknown[]) => statement.run(...params),
+      get: <T = unknown>(...params: unknown[]) => statement.get(...params) as T,
+      all: <T = unknown>(...params: unknown[]) => statement.all(...params) as T[],
+    };
+  }
+
+  exec(sql: string): void {
+    this.db.exec(sql);
+  }
+
+  pragma(sql: string): void {
+    this.db.exec(`PRAGMA ${sql}`);
+  }
+
+  transaction<T>(fn: () => T): () => T {
+    return () => {
+      this.db.exec('BEGIN');
+      try {
+        const result = fn();
+        this.db.exec('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          this.db.exec('ROLLBACK');
+        } catch {
+          // Ignore rollback errors and rethrow the original failure.
+        }
+        throw error;
+      }
+    };
+  }
+
+  close(): void {
+    this.db.close();
+  }
+}
 
 export class DatabaseError extends Error {
   constructor(
@@ -25,16 +110,13 @@ export class DatabaseError extends Error {
 }
 
 export class Database {
-  private db: BetterSqlite3.Database | null = null;
+  private db: DatabaseConnection | null = null;
   private readonly dbPath: string;
 
   constructor({ dbPath }: { dbPath: string }) {
     this.dbPath = dbPath;
   }
 
-  /**
-   * Open the database, enable WAL mode + foreign keys, and run pending migrations.
-   */
   init(): void {
     this.ensureDirectory();
     this.openConnection();
@@ -43,23 +125,23 @@ export class Database {
     this.runMigrations();
   }
 
-  /** Raw better-sqlite3 Database handle for service-layer queries. */
-  getDb(): BetterSqlite3.Database {
+  getDb(): DatabaseConnection {
     if (!this.db) {
-      throw new DatabaseError('getDb', new Error('Database not initialized. Call init() first.'), {});
+      throw new DatabaseError(
+        'getDb',
+        new Error('Database not initialized. Call init() first.'),
+        {},
+      );
     }
     return this.db;
   }
 
-  /** Close the underlying SQLite connection. */
   close(): void {
     if (this.db) {
       this.db.close();
       this.db = null;
     }
   }
-
-  // --- Private ---
 
   private ensureDirectory(): void {
     try {
@@ -71,9 +153,23 @@ export class Database {
 
   private openConnection(): void {
     try {
-      this.db = new BetterSqlite3(this.dbPath);
-    } catch (err) {
-      throw new DatabaseError('open', err as Error, { dbPath: this.dbPath });
+      this.db = new BetterSqliteConnection(new BetterSqlite3(this.dbPath));
+      return;
+    } catch (primaryError) {
+      try {
+        const { DatabaseSync } = nodeRequire('node:sqlite');
+        this.db = new NodeSqliteConnection(new DatabaseSync(this.dbPath));
+        return;
+      } catch (fallbackError) {
+        throw new DatabaseError(
+          'open',
+          fallbackError as Error,
+          {
+            dbPath: this.dbPath,
+            primaryError: primaryError instanceof Error ? primaryError.message : String(primaryError),
+          },
+        );
+      }
     }
   }
 
@@ -96,9 +192,8 @@ export class Database {
   private runMigrations(): void {
     const db = this.getDb();
     const applied = this.getAppliedVersions();
-    const pending = migrations.filter((m) => !applied.has(m.version));
+    const pending = migrations.filter((migration) => !applied.has(migration.version));
 
-    // Run in version order
     pending.sort((a, b) => a.version - b.version);
 
     for (const migration of pending) {
@@ -106,8 +201,7 @@ export class Database {
     }
 
     if (pending.length > 0) {
-      const names = pending.map((m) => `v${m.version} ${m.name}`).join(', ');
-      // Using console since pino logger may not be configured at DB init time
+      const names = pending.map((migration) => `v${migration.version} ${migration.name}`).join(', ');
       console.log(`[db] Applied migrations: ${names}`);
     }
   }
@@ -116,10 +210,13 @@ export class Database {
     const rows = this.getDb()
       .prepare('SELECT version FROM _migrations ORDER BY version')
       .all() as Array<{ version: number }>;
-    return new Set(rows.map((r) => r.version));
+    return new Set(rows.map((row) => row.version));
   }
 
-  private runMigration(db: BetterSqlite3.Database, migration: { version: number; name: string; up: (db: BetterSqlite3.Database) => void }): void {
+  private runMigration(
+    db: DatabaseConnection,
+    migration: { version: number; name: string; up: (db: DatabaseConnection) => void },
+  ): void {
     try {
       const insert = db.prepare('INSERT INTO _migrations (version, name) VALUES (?, ?)');
       const recordMigration = db.transaction(() => {

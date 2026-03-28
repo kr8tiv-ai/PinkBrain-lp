@@ -108,7 +108,7 @@ export class Scheduler {
    * continues for the remaining runs.
    */
   async recoverIncompleteRuns(): Promise<void> {
-    const incomplete = this.config.runService.listIncomplete();
+    const incomplete = this.config.runService.listIncomplete() ?? [];
 
     for (const run of incomplete) {
       try {

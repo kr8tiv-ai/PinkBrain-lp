@@ -20,6 +20,8 @@ import { executeLiquidityPhase } from './phases/liquidity.js';
 import { executeLockPhase } from './phases/lock.js';
 import { executeDistributePhase } from './phases/distribute.js';
 
+const LAMPORTS_PER_SOL = 1_000_000_000;
+
 // ---------------------------------------------------------------------------
 // Phase Pipeline
 // ---------------------------------------------------------------------------
@@ -155,6 +157,11 @@ export class Engine {
         // All phases complete or terminal — nothing to do
         return run;
       }
+      if (resumeState === 'COMPLETE') {
+        run = runService.updateState(runId, 'COMPLETE');
+        auditService.logTransition(runId, run.state, 'COMPLETE');
+        return run;
+      }
       currentState = resumeState;
     }
 
@@ -178,7 +185,12 @@ export class Engine {
     // Execute each phase in order
     for (let i = startIndex; i < PHASE_PIPELINE.length; i++) {
       const step = PHASE_PIPELINE[i];
-      const prevState = run.state;
+      if (run.state !== step.state) {
+        const prevState = run.state;
+        run = runService.updateState(runId, step.state);
+        auditService.logTransition(runId, prevState, step.state);
+        ctx.run = run;
+      }
 
       try {
         // Log phase start
@@ -197,11 +209,12 @@ export class Engine {
             (phaseData as Record<string, unknown>)[step.phaseKey] = null;
           }
 
-          const updated = runService.updateState(runId, step.state, phaseData);
-          auditService.logTransition(runId, prevState, step.state);
+          const nextState = step.nextState;
+          const updated = runService.updateState(runId, nextState, phaseData);
           auditService.logPhase(runId, step.state, 'COMPLETE', {
             result: result ?? 'no-op',
           });
+          auditService.logTransition(runId, step.state, nextState);
 
           // Extract tx signature for audit log if available
           if (result && typeof result === 'object' && 'txSignature' in result) {
@@ -221,14 +234,19 @@ export class Engine {
         // check if we should short-circuit to COMPLETE
         if (step.state === 'CLAIMING' && result !== null) {
           const claimResult = result as { claimableAmount: number; txSignature: string | null };
-          if (claimResult.txSignature === null && claimResult.claimableAmount < strategy.minCompoundThreshold) {
+          const thresholdLamports = Math.floor(strategy.minCompoundThreshold * LAMPORTS_PER_SOL);
+          if (
+            claimResult.txSignature === null &&
+            claimResult.claimableAmount < thresholdLamports
+          ) {
             // Below threshold — skip to COMPLETE
+            const fromState = run.state;
             run = runService.updateState(runId, 'COMPLETE');
-            auditService.logTransition(runId, 'CLAIMING', 'COMPLETE');
+            auditService.logTransition(runId, fromState, 'COMPLETE');
             auditService.log(runId, 'SKIP', {
               reason: 'below_threshold',
               claimableAmount: claimResult.claimableAmount,
-              threshold: strategy.minCompoundThreshold,
+              threshold: thresholdLamports,
             });
             break;
           }

@@ -20,12 +20,16 @@ import type { Strategy, FeeSourceType, DistributionMode, StrategyStatus } from '
 // ---------------------------------------------------------------------------
 
 let tempDir: string;
+let database: Database | undefined;
+let service: StrategyService;
 
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), 'pinkbrain-strategy-test-'));
 });
 
 afterEach(() => {
+  database?.close();
+  database = undefined;
   if (existsSync(tempDir)) {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -80,16 +84,9 @@ type CreateInput = Omit<Strategy, 'strategyId' | 'createdAt' | 'updatedAt' | 'la
 /** Fields allowed in an update call. */
 type UpdateInput = Partial<Omit<Strategy, 'strategyId' | 'createdAt' | 'updatedAt' | 'lastRunId'>>;
 
-let database: Database;
-let service: StrategyService;
-
 beforeEach(() => {
   database = new Database({ dbPath: dbPath() });
   database.init();
-});
-
-afterEach(() => {
-  database.close();
 });
 
 // ---------------------------------------------------------------------------
@@ -409,7 +406,7 @@ describe('StrategyService', () => {
     it('re-validates token mints when tokens are changed', async () => {
       const mockConn = createMockConnection({
         // The new token B mint does not exist
-        'NEW_FAKE_MINT_ADDRESS_111111111111111': null,
+        '11111111111111111111111111111111': null,
       });
       service = createStrategyService(database, mockConn);
 
@@ -417,7 +414,7 @@ describe('StrategyService', () => {
 
       try {
         await service.updateStrategy(created.strategyId, {
-          targetTokenB: 'NEW_FAKE_MINT_ADDRESS_111111111111111',
+          targetTokenB: '11111111111111111111111111111111',
         });
         expect.fail('Should have thrown');
       } catch (err) {

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, AlertTriangle, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCreateStrategy } from '../api/strategies';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
+import { useBagsAuth } from '../hooks/useBagsAuth';
 import type { DistributionMode, FeeSourceType } from '../types/strategy';
 
 interface FormState {
@@ -65,9 +66,16 @@ export function CreateStrategyPage() {
   const [form, setForm] = useState(INITIAL);
   const navigate = useNavigate();
   const createMut = useCreateStrategy();
+  const bagsAuth = useBagsAuth();
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  useEffect(() => {
+    if (bagsAuth.walletAddress && !form.ownerWallet) {
+      set('ownerWallet', bagsAuth.walletAddress);
+    }
+  }, [bagsAuth.walletAddress, form.ownerWallet]);
 
   const canNext = () => {
     switch (step) {
@@ -124,6 +132,20 @@ export function CreateStrategyPage() {
 
       <h1 className="text-xl font-bold">Create Strategy</h1>
 
+      {bagsAuth.isInBags && (
+        <Card className="border-pink-500/20 bg-pink-500/5">
+          <p className="text-sm font-medium text-pink-300">Bags App Store session detected</p>
+          <p className="mt-1 text-xs text-gray-400">
+            {bagsAuth.loading && 'Connecting to your Bags wallet...'}
+            {!bagsAuth.loading && bagsAuth.walletAddress && `Using ${bagsAuth.walletAddress} as the strategy owner.`}
+            {!bagsAuth.loading && !bagsAuth.walletAddress && 'Wallet access was not available, so owner wallet entry stays manual.'}
+          </p>
+          {bagsAuth.error && (
+            <p className="mt-2 text-xs text-orange-300">{bagsAuth.error}</p>
+          )}
+        </Card>
+      )}
+
       {/* Step indicator */}
       <div className="flex items-center gap-2">
         {STEPS.map((label, i) => (
@@ -154,10 +176,11 @@ export function CreateStrategyPage() {
           <div className="space-y-4">
             <Input
               label="Owner Wallet"
-              hint="Your Solana wallet address"
+              hint={bagsAuth.walletAddress ? 'Filled from your Bags wallet session' : 'Your Solana wallet address'}
               placeholder="So11111..."
               value={form.ownerWallet}
               onChange={(e) => set('ownerWallet', e.target.value)}
+              disabled={Boolean(bagsAuth.walletAddress)}
             />
             <div className="grid grid-cols-2 gap-3">
               <Input

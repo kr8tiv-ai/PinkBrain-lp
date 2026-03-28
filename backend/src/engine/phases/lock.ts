@@ -1,47 +1,43 @@
 /**
- * Lock phase — permanently locks a position's liquidity.
- *
- * IRREVERSIBLE. Reads the positionNFT from the run's liquidityAdd data
- * (populated by the liquidity phase), verifies the position has unlocked
- * liquidity, and calls permanentLockPosition.
+ * Lock phase - permanently locks a position's liquidity.
  */
 
-import { PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
+import {
+  derivePositionAddress,
+  derivePositionNftAccount,
+} from '@meteora-ag/cp-amm-sdk';
+import { PublicKey } from '@solana/web3.js';
 import type { PhaseContext, LockPhaseResult } from '../types.js';
 
-/**
- * Execute the lock phase of a compounding run.
- */
 export async function executeLockPhase(ctx: PhaseContext): Promise<LockPhaseResult> {
   const { strategy, run, meteoraClient, sender } = ctx;
 
-  // Must have liquidityAdd data from previous phase
   if (!run.liquidityAdd) {
     throw new Error('Cannot lock: liquidityAdd phase data is missing');
   }
 
-  const positionNft = new PublicKey(run.liquidityAdd.positionNft);
+  const positionNftMint = new PublicKey(run.liquidityAdd.positionNft);
+  const position = new PublicKey(
+    run.liquidityAdd.positionAddress ?? derivePositionAddress(positionNftMint).toString(),
+  );
+  const positionNftAccount = new PublicKey(
+    run.liquidityAdd.positionNftAccount ?? derivePositionNftAccount(positionNftMint).toString(),
+  );
   const ownerPubkey = new PublicKey(strategy.ownerWallet);
 
-  // Fetch pool address from strategy or find it
   let poolAddress: PublicKey;
   if (strategy.meteoraConfig.poolAddress) {
     poolAddress = new PublicKey(strategy.meteoraConfig.poolAddress);
   } else {
-    // Fetch position state to get the pool address
-    const positionState = await meteoraClient.fetchPositionState(positionNft);
+    const positionState = await meteoraClient.fetchPositionState(position);
     poolAddress = positionState.pool;
   }
 
-  // Fetch pool state to get vault info
-  const poolState = await meteoraClient.fetchPoolState(poolAddress);
-
-  // Call permanent lock
   const lockTxBuf = await meteoraClient.permanentLockPosition({
     owner: ownerPubkey,
-    position: positionNft,
-    positionNftAccount: positionNft,
+    position,
+    positionNftAccount,
     pool: poolAddress,
     unlockedLiquidity: new BN(run.liquidityAdd.liquidityDelta),
   });

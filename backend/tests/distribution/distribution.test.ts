@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { PublicKey } from '@solana/web3.js';
+import { Keypair, PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 import { executeDistributePhase } from '../../src/engine/phases/distribute.js';
 import { buildTop100Distribution } from '../../src/distribution/top-100.js';
@@ -26,9 +26,10 @@ const OWNER = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
 const OWNER_PUBKEY = new PublicKey(OWNER);
 
 function createMockSender(): TransactionSender {
+  let counter = 0;
   return {
     signAndSendTransaction: vi.fn(async (tx: string) => ({
-      signature: `sig-${tx.slice(0, 8)}`,
+      signature: `sig-${counter++}-${tx.length}`,
     })),
   };
 }
@@ -42,7 +43,7 @@ function createMockConnection(getTokenAccountBalanceResult?: { value: { amount: 
       return getTokenAccountBalanceResult;
     }),
     getLatestBlockhash: vi.fn(async () => ({
-      blockhash: 'dummy-blockhash-1111111111111111111',
+      blockhash: '11111111111111111111111111111111',
       lastValidBlockHeight: 1000,
     })),
   };
@@ -126,8 +127,8 @@ function createContext(overrides?: Partial<PhaseContext>): PhaseContext {
  */
 function generateHolders(balances: number[]): TokenHolder[] {
   return balances.map((balance, i) => ({
-    address: `ata-address-${i}`,
-    owner: `holder-${String(i).padStart(3, '0')}-${crypto.randomUUID().slice(0, 8)}`,
+    address: Keypair.generate().publicKey.toBase58(),
+    owner: Keypair.generate().publicKey.toBase58(),
     balance: new BN(balance),
   }));
 }
@@ -640,7 +641,7 @@ describe('executeDistributePhase — mode selection', () => {
   });
 
   it('TOP_100_HOLDERS mode returns top-100 result', async () => {
-    const holders = generateHolders([100, 200, 300, 400, 500]);
+    const holders = generateHolders([100, 200, 300, 400, 500, 600]);
     const totalAmount = 10_000_000;
 
     const heliusClient = createMockHeliusClient({
@@ -668,7 +669,7 @@ describe('executeDistributePhase — mode selection', () => {
     const result = await executeDistributePhase(ctx);
 
     expect(result.totalYieldClaimed).toBe(totalAmount);
-    expect(result.recipientCount).toBe(5);
+    expect(result.recipientCount).toBe(6);
     expect(result.txSignatures.length).toBeGreaterThan(1); // multiple batches
   });
 

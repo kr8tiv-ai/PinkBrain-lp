@@ -12,25 +12,41 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // ---------------------------------------------------------------------------
 
 // Mock run/audit/engine bootstrap
-const mockExecuteStrategy = vi.fn();
-const mockResumeRun = vi.fn();
-const mockGetLogsForRun = vi.fn();
-const mockGetRunsByStrategyId = vi.fn();
-const mockListIncomplete = vi.fn();
+const {
+  mockExecuteStrategy,
+  mockResumeRun,
+  mockGetLogsForRun,
+  mockGetRunsByStrategyId,
+  mockListIncomplete,
+  mockEngine,
+  mockRunService,
+  mockAuditService,
+} = vi.hoisted(() => {
+  const mockExecuteStrategy = vi.fn();
+  const mockResumeRun = vi.fn();
+  const mockGetLogsForRun = vi.fn();
+  const mockGetRunsByStrategyId = vi.fn();
+  const mockListIncomplete = vi.fn();
 
-const mockEngine = {
-  executeStrategy: mockExecuteStrategy,
-  resumeRun: mockResumeRun,
-};
-
-const mockRunService = {
-  getRunsByStrategyId: mockGetRunsByStrategyId,
-  listIncomplete: mockListIncomplete,
-};
-
-const mockAuditService = {
-  getLogsForRun: mockGetLogsForRun,
-};
+  return {
+    mockExecuteStrategy,
+    mockResumeRun,
+    mockGetLogsForRun,
+    mockGetRunsByStrategyId,
+    mockListIncomplete,
+    mockEngine: {
+      executeStrategy: mockExecuteStrategy,
+      resumeRun: mockResumeRun,
+    },
+    mockRunService: {
+      getRunsByStrategyId: mockGetRunsByStrategyId,
+      listIncomplete: mockListIncomplete,
+    },
+    mockAuditService: {
+      getLogsForRun: mockGetLogsForRun,
+    },
+  };
+});
 
 // Mock bootstrap-engine module
 vi.mock('../scripts/bootstrap-engine.js', () => ({
@@ -119,7 +135,7 @@ vi.mock('@solana/web3.js', () => ({
 
 // Import CLI after mocks
 import { Command } from 'commander';
-import { registerRunCommands } from '../scripts/cli.js';
+import { registerRunCommands } from '../scripts/cli.ts';
 import { RunNotFoundError, RunStateError } from '../src/services/errors.js';
 
 // ---------------------------------------------------------------------------

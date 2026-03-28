@@ -7,19 +7,20 @@
  */
 
 import { resolve } from 'node:path';
+import { Connection } from '@solana/web3.js';
 import { getConfig } from './config/index.js';
 import { createBagsClient } from './clients/BagsClient.js';
 import { createMeteoraClient } from './clients/MeteoraClient.js';
 import { createHeliusClient } from './clients/HeliusClient.js';
-import { Database } from './services/Database.js';
-import { createStrategyService } from './services/StrategyService.js';
-import { createRunService } from './engine/RunService.js';
+import { createServer } from './api/server.js';
 import { createAuditService } from './engine/AuditService.js';
 import { Engine } from './engine/Engine.js';
+import { createRunService } from './engine/RunService.js';
 import { createScheduler } from './engine/Scheduler.js';
-import { createServer } from './api/server.js';
 import type { EngineConfig, TransactionSender } from './engine/types.js';
-import { Connection } from '@solana/web3.js';
+import { createKeypairTransactionSender } from './services/KeypairTransactionSender.js';
+import { Database } from './services/Database.js';
+import { createStrategyService } from './services/StrategyService.js';
 
 async function main() {
   const config = getConfig();
@@ -31,16 +32,13 @@ async function main() {
   console.log(`Fee Threshold: ${config.feeThresholdSol} SOL`);
   console.log(`Environment: ${config.nodeEnv}`);
 
-  // --- Database ---
   const dbPath = process.env.DB_PATH || resolve(process.cwd(), 'data', 'pinkbrain.db');
   const db = new Database({ dbPath });
   db.init();
   console.log(`Database: ${dbPath}`);
 
-  // --- Solana Connection ---
   const connection = new Connection(config.heliusRpcUrl, 'confirmed');
 
-  // --- Clients ---
   const bagsClient = createBagsClient(config.bagsApiKey, config.bagsApiBaseUrl);
   const meteoraClient = createMeteoraClient(connection);
   const heliusClient = createHeliusClient({
@@ -48,21 +46,34 @@ async function main() {
     rpcUrl: config.heliusRpcUrl,
   });
 
-  // --- Transaction Sender ---
-  // In production, the Bags Agent runtime provides signing.
-  // For now, a stub — replaced when embedded in Bags.
-  const sender: TransactionSender = {
+  const fallbackSender: TransactionSender = {
     signAndSendTransaction: async () => {
-      throw new Error('No TransactionSender configured — run via Bags Agent runtime');
+      throw new Error('No transaction signer configured. Set SIGNER_PRIVATE_KEY.');
     },
   };
+  const sender = config.signerPrivateKey
+    ? createKeypairTransactionSender({
+        connection,
+        privateKey: config.signerPrivateKey,
+      })
+    : fallbackSender;
 
-  // --- Services ---
+  if (!config.signerPrivateKey) {
+    const message = 'SIGNER_PRIVATE_KEY is not set. Manual and scheduled runs will fail.';
+    if (config.nodeEnv === 'production') {
+      throw new Error(message);
+    }
+    console.warn(message);
+  }
+
+  if (!config.apiAuthToken && config.nodeEnv === 'production') {
+    throw new Error('API_AUTH_TOKEN is required in production.');
+  }
+
   const strategyService = createStrategyService(db, connection);
   const runService = createRunService(db);
   const auditService = createAuditService(db);
 
-  // --- Engine ---
   const engineConfig: EngineConfig = {
     strategyService,
     runService,
@@ -75,7 +86,6 @@ async function main() {
   };
   const engine = new Engine(engineConfig);
 
-  // --- Scheduler ---
   const scheduler = createScheduler({
     strategyService,
     runService,
@@ -83,7 +93,6 @@ async function main() {
     engine,
   });
 
-  // --- HTTP API ---
   const app = await createServer({
     strategyService,
     runService,
@@ -91,18 +100,16 @@ async function main() {
     engine,
     scheduler,
     db,
+    config,
   });
 
-  // --- Start ---
   await app.listen({ port, host });
   console.log(`API server listening on http://${host}:${port}`);
 
   await scheduler.start();
   console.log(`Scheduler started: ${scheduler.getScheduledCount()} strategies scheduled`);
-
   console.log('\nPinkBrain LP Backend Ready');
 
-  // --- Graceful Shutdown ---
   const shutdown = async () => {
     console.log('\nShutting down...');
     scheduler.stop();
