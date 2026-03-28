@@ -73,4 +73,5 @@ export interface BagsApiError {
 
 export interface RateLimitInfo {
   remaining: number;
-  reset: number; // Unix timestamp in}
+  reset: number; // Unix timestamp in seconds
+}

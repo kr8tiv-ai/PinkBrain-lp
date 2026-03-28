@@ -85,6 +85,10 @@ export class Scheduler {
     }
 
     const task = cron.schedule(schedule, async () => {
+      // Jitter: random 0-30s delay to prevent thundering herd
+      const jitter = Math.floor(Math.random() * 30_000);
+      await new Promise((r) => setTimeout(r, jitter));
+
       try {
         await this.config.engine.executeStrategy(strategyId);
       } catch (err) {

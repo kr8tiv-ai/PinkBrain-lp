@@ -1,1 +1,15 @@
-[]
+{
+  "name": "PinkBrain LP",
+  "slug": "pinkbrain-lp",
+  "version": "0.1.0",
+  "description": "Automated fee-compounding liquidity management for Bags.fm. Claims fees, swaps via Bags API, adds liquidity to Meteora DAMM v2, permanently locks positions, and distributes LP fees to holders.",
+  "author": "KR8TIV AI",
+  "entry": "./frontend/dist/index.html",
+  "category": "DeFi",
+  "tags": ["liquidity", "compounding", "meteora", "fees", "solana"],
+  "permissions": ["wallet:read", "wallet:sign", "transaction:send"],
+  "requirements": {
+    "bagsApi": true,
+    "walletAccess": true
+  }
+}

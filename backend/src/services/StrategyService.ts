@@ -95,12 +95,7 @@ function rowToStrategy(row: Record<string, unknown>): Strategy {
 /**
  * Count how many distinct minutes the cron minute field would fire at in one hour.
  *
- * Supports:
- *   `*`         → 60
- *   `*/N`       → ceil(60/N)
- *   `N`         → 1
- *   `N,M,...`   → count of entries
- *   `N-M`       → M - N + 1
+ * Supports: * (60), star/N (ceil(60/N)), N (1), N,M,... (count), N-M (M-N+1)
  */
 function countMinuteExecutions(field: string): number {
   const trimmed = field.trim();
