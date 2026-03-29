@@ -10,9 +10,9 @@
   "scripts": {
     "backend": "npm run dev -w backend",
     "frontend": "npm run dev -w frontend",
-    "build": "npm run build -ws",
-    "test": "npm run test -ws",
-    "lint": "npm run lint -ws",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
     "verify:backend": "npm exec -- tsc -p backend/tsconfig.json && npm exec --workspace backend -- vitest run",
     "verify:frontend": "npm exec --workspace frontend -- tsc -b && npm exec --workspace frontend -- vitest run && npm exec --workspace frontend -- vite build",
     "verify": "npm run verify:backend && npm run verify:frontend"

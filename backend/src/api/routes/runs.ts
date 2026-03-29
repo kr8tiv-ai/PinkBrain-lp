@@ -4,6 +4,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { ApiContext } from '../context.js';
+import { RUN_RESUME_RATE_LIMIT } from '../rateLimits.js';
 
 export function registerRunRoutes(app: FastifyInstance, ctx: ApiContext): void {
   const { runService, auditService, engine } = ctx;
@@ -40,6 +41,7 @@ export function registerRunRoutes(app: FastifyInstance, ctx: ApiContext): void {
   // Resume a failed/interrupted run
   app.post<{ Params: { id: string } }>(
     '/api/runs/:id/resume',
+    { config: { rateLimit: RUN_RESUME_RATE_LIMIT } },
     async (request) => {
       return engine.resumeRun(request.params.id);
     },

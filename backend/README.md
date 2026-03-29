@@ -1,131 +1,125 @@
 # PinkBrain LP Backend
 
-Fee-compounding engine for [Bags.fm](https://bags.fm) — automatically claims, swaps, compounds, and distributes liquidity provider fees.
+Backend control plane and execution engine for PinkBrain LP.
 
-## Setup
+It owns:
+
+- strategy validation and persistence
+- scheduler-driven compounding runs
+- Bags, Meteora, and Helius integrations
+- operator authentication and session issuance
+- run audit trails and health reporting
+- signer delegation to a remote signer or controlled local fallback
+
+## Quick Start
 
 ```bash
 npm install
-cp .env.example .env  # Configure environment variables
-npx ts-node scripts/cli.ts strategy list  # Verify setup
+cp .env.example .env
+npm run backend
 ```
 
-## Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `HELIUS_RPC_URL` | Yes | — | Helius RPC endpoint (mainnet) |
-| `OWNER_WALLET` | Yes | — | Strategy owner wallet address (base58) |
-| `DB_PATH` | No | `data/pinkbrain.db` | SQLite database path |
-| `BAGS_API_KEY` | No | — | Bags.fm API key for swap routing |
-| `BAGS_PARTNER_ID` | No | — | Bags.fm partner ID for fee claiming |
-
-## CLI Usage
-
-### Strategy Management
+Useful verification commands:
 
 ```bash
-# Create a compounding strategy
-npx ts-node scripts/cli.ts strategy create \
-  --token-a <mint> \
-  --token-b <mint> \
-  --schedule "0 */6 * * *" \
-  --owner-wallet <address>
-
-# List all strategies
-npx ts-node scripts/cli.ts strategy list
-
-# Get strategy details
-npx ts-node scripts/cli.ts strategy get <strategy-id>
-
-# Update a strategy
-npx ts-node scripts/cli.ts strategy update <strategy-id> \
-  --schedule "0 */4 * * *" \
-  --slippage 100
-
-# Delete a strategy (prompts confirmation, or use --force)
-npx ts-node scripts/cli.ts strategy delete <strategy-id> --force
+npm run verify:backend
+npm run smoke -w backend
 ```
 
-#### Create Options
-
-| Flag | Required | Default | Description |
-|------|----------|---------|-------------|
-| `--token-a` | Yes | — | First token mint address |
-| `--token-b` | Yes | — | Second token mint address |
-| `--schedule` | Yes | — | Cron expression (min interval: 1 hour) |
-| `--owner-wallet` | No | `$OWNER_WALLET` | Owner wallet address |
-| `--source` | No | `FEES` | Fee source stream |
-| `--distribution` | No | `OWNER_ONLY` | Distribution mode: `OWNER_ONLY` or `TOP_100_HOLDERS` |
-| `--distribution-token` | No | token-a | Token to distribute to holders |
-| `--slippage` | No | 50 | Slippage tolerance in basis points |
-| `--min-compound-threshold` | No | 7 | Minimum SOL claim to trigger compounding |
-
-### Run Management
+## Main Scripts
 
 ```bash
-# Execute a strategy immediately
-npx ts-node scripts/cli.ts run execute <strategy-id>
-
-# List runs (optionally filter by strategy)
-npx ts-node scripts/cli.ts run list [strategy-id]
-
-# Resume a failed run from last successful state
-npx ts-node scripts/cli.ts run resume <run-id>
-
-# View audit log for a run
-npx ts-node scripts/cli.ts run logs <run-id>
+npm run backend                  # watch mode
+npm run cli -w backend           # operator CLI
+npm run bootstrap-token -w backend
+npm run remote-signer -w backend
+npm run smoke -w backend
 ```
 
-## Compounding Pipeline
+## Environment
 
-Each run progresses through these states:
+The backend reads the shared root `.env`.
 
-```
-PENDING → CLAIMING → SWAPPING → ADDING_LIQUIDITY → LOCKING → DISTRIBUTING → COMPLETE
-                                                                              ↗
-                                                                    FAILED (any phase)
-```
+Most important settings:
 
-- **CLAIMING**: Claims accumulated fees from Bags.fm
-- **SWAPPING**: Swaps claimed fees to the target token pair
-- **ADDING_LIQUIDITY**: Adds swapped tokens to Meteora DAMM v2 pool
-- **LOCKING**: Permanently locks the liquidity position
-- **DISTRIBUTING**: Distributes remaining yield (owner or top-100 holders)
-- **COMPLETE**: Run finished successfully
+| Variable | Purpose |
+|----------|---------|
+| `BAGS_API_KEY` | Bags.fm API access |
+| `HELIUS_API_KEY` | Helius RPC and DAS access |
+| `API_AUTH_TOKEN` | Programmatic API auth and bootstrap mint authority |
+| `SESSION_SECRET` | Signs browser session cookies; required explicitly in production |
+| `BOOTSTRAP_TOKEN_SECRET` | Signs short-lived bootstrap tokens; required explicitly in production |
+| `SIGNER_PRIVATE_KEY` | Local signing fallback |
+| `REMOTE_SIGNER_URL` | Preferred production signer endpoint |
+| `REMOTE_SIGNER_AUTH_TOKEN` | Auth token for the remote signer |
+| `ALLOW_AGENT_WALLET_EXPORT` | Break-glass Bags Agent export gate |
+| `DRY_RUN` | Safe execution toggle |
+| `EXECUTION_KILL_SWITCH` | Hard stop for live execution |
 
-Failed runs can be resumed from any intermediate state — the engine inspects phase results to determine where to continue.
+See [/.env.example](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/.env.example) for the full list.
 
-## Distribution Modes
+## Auth Model
 
-**Owner-only**: Transfers all distribution tokens to the strategy owner's Associated Token Account.
+Preferred operator path:
 
-**Top-100 holders**: Queries Helius DAS API for token holders, filters protocol/burn addresses, sorts by balance (top 100), calculates proportional weights, and sends batched SPL transfers.
+1. Mint a short-lived bootstrap token with `npm run bootstrap-token -w backend`.
+2. Exchange it through `POST /api/auth/bootstrap/exchange`.
+3. Operate the UI with an HttpOnly session cookie.
 
-## Architecture
+The browser should not need the long-lived `API_AUTH_TOKEN`.
 
-```
-CLI → bootstrap → StrategyService → SQLite
-                  Engine → StateMachine
-                        → RunService → runs table
-                        → AuditService → audit_log table
-                        → Phase functions → BagsClient, MeteoraClient
-                  Scheduler → cron → Engine.executeStrategy()
-```
+In production the session cookie is issued as a `__Host-` cookie with `Secure`, `SameSite=None`, and `Partitioned` attributes.
 
-## Testing
+Cookie-authenticated writes require:
+
+- a trusted `Origin`
+- a matching `X-CSRF-Token`
+
+Bearer token access remains available for automation and direct API clients.
+
+## Signer Modes
+
+Recommended order:
+
+1. `REMOTE_SIGNER_URL`
+2. `SIGNER_PRIVATE_KEY`
+3. break-glass Bags Agent wallet export
+
+Remote signer is the preferred production posture because it keeps the long-lived key out of the main backend process.
+
+Break-glass Bags Agent export remains disabled unless `ALLOW_AGENT_WALLET_EXPORT=true`.
+
+## API Areas
+
+- auth: session, bootstrap exchange, logout
+- health: liveness, readiness
+- strategies: CRUD, control endpoints, insights
+- runs: listing, detail, logs, resume
+- validation: public key, token mint, schedule
+- stats: operator summary metrics
+
+## Safety Features
+
+- resumable phase pipeline
+- explicit rate limiting
+- bigint-safe distribution math
+- preserved transaction confirmation context
+- public liveness with protected readiness detail
+- defensive response headers
+- structured audit logging
+
+## Tests
 
 ```bash
-npx vitest run                    # Run all tests
-npx vitest run backend/tests/     # Run specific test directory
-npx vitest run --reporter=verbose # Verbose output
+npm exec --workspace backend -- vitest run
+npm exec --workspace backend -- vitest run tests/session-auth.test.ts
+npm exec --workspace backend -- vitest run tests/rate-limits.test.ts
 ```
 
-## Dependencies
+## Related Docs
 
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) — Embedded SQLite
-- [commander](https://github.com/tj/commander.js) — CLI framework
-- [node-cron](https://github.com/node-cron/node-cron) — Cron scheduling
-- [@meteora-ag/cp-amm-sdk](https://github.com/MeteoraAg/damm-v2) — DAMM v2 (permanent locking)
-- [@solana/web3.js](https://github.com/solana-labs/web3.js) — Solana RPC
-- [@solana/spl-token](https://github.com/solana-labs/solana-program-library) — SPL Token instructions
+- [README.md](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/README.md)
+- [PRD.md](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/PRD.md)
+- [runbook.md](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/docs/runbook.md)
+- [remote-signer.md](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/docs/operations/remote-signer.md)
+- [secret-rotation.md](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/docs/operations/secret-rotation.md)

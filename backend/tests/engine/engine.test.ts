@@ -18,7 +18,7 @@ import { Engine, ConcurrentRunError } from '../../src/engine/Engine.js';
 import { ExecutionPolicy } from '../../src/engine/ExecutionPolicy.js';
 import type { EngineConfig } from '../../src/engine/types.js';
 import type { TransactionSender } from '../../src/engine/types.js';
-import type { Strategy, CompoundingRun, RunState } from '../../src/types/index.js';
+import type { Strategy } from '../../src/types/index.js';
 import type { BagsClient } from '../../src/clients/BagsClient.js';
 import type { MeteoraClient } from '../../src/clients/MeteoraClient.js';
 import type { HeliusClient } from '../../src/clients/HeliusClient.js';

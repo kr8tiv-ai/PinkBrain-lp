@@ -92,6 +92,8 @@ function getEnvBoolean(key: string, defaultValue = false): boolean {
 export function loadConfig(): Config {
   const heliusApiKey = getEnv('HELIUS_API_KEY', '');
   const nodeEnv = (getEnv('NODE_ENV', 'development')) as Config['nodeEnv'];
+  const rawSessionSecret = process.env.SESSION_SECRET?.trim() ?? '';
+  const rawBootstrapTokenSecret = process.env.BOOTSTRAP_TOKEN_SECRET?.trim() ?? '';
   const solanaNetwork = getEnv('SOLANA_NETWORK', 'mainnet-beta') as 'mainnet-beta' | 'devnet';
   const corsOrigins = getEnv(
     'CORS_ORIGINS',
@@ -100,6 +102,24 @@ export function loadConfig(): Config {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+
+  if (nodeEnv === 'production' && !rawSessionSecret) {
+    throw new Error('SESSION_SECRET must be explicitly configured in production');
+  }
+
+  if (nodeEnv === 'production' && !rawBootstrapTokenSecret) {
+    throw new Error('BOOTSTRAP_TOKEN_SECRET must be explicitly configured in production');
+  }
+
+  const remoteSignerUrl = getEnv('REMOTE_SIGNER_URL', '');
+  const remoteSignerAuthToken = getEnv('REMOTE_SIGNER_AUTH_TOKEN', '');
+
+  if (remoteSignerUrl && !remoteSignerAuthToken) {
+    throw new Error('REMOTE_SIGNER_AUTH_TOKEN is required when REMOTE_SIGNER_URL is configured');
+  }
+
+  const sessionSecret = rawSessionSecret || getEnv('API_AUTH_TOKEN', '');
+  const bootstrapTokenSecret = rawBootstrapTokenSecret || sessionSecret;
 
   return {
     // Bags.fm API
@@ -124,9 +144,9 @@ export function loadConfig(): Config {
     // API protection / browser access
     apiAuthToken: getEnv('API_AUTH_TOKEN', ''),
     corsOrigins,
-    sessionSecret: getEnv('SESSION_SECRET', getEnv('API_AUTH_TOKEN', '')),
+    sessionSecret,
     sessionTtlHours: getEnvNumber('SESSION_TTL_HOURS', 12),
-    bootstrapTokenSecret: getEnv('BOOTSTRAP_TOKEN_SECRET', getEnv('SESSION_SECRET', getEnv('API_AUTH_TOKEN', ''))),
+    bootstrapTokenSecret,
     bootstrapTokenTtlMinutes: getEnvNumber('BOOTSTRAP_TOKEN_TTL_MINUTES', 10),
     allowBrowserOperatorTokenLogin: getEnvBoolean('ALLOW_BROWSER_OPERATOR_TOKEN_LOGIN', false),
 
@@ -138,8 +158,8 @@ export function loadConfig(): Config {
 
     // Signing
     signerPrivateKey: getEnv('SIGNER_PRIVATE_KEY', ''),
-    remoteSignerUrl: getEnv('REMOTE_SIGNER_URL', ''),
-    remoteSignerAuthToken: getEnv('REMOTE_SIGNER_AUTH_TOKEN', ''),
+    remoteSignerUrl,
+    remoteSignerAuthToken,
     remoteSignerTimeoutMs: getEnvNumber('REMOTE_SIGNER_TIMEOUT_MS', 10000),
 
     // Runtime execution policy

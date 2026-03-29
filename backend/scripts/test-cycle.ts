@@ -16,7 +16,6 @@ import {
   Keypair,
   PublicKey,
   Transaction,
-  VersionedTransaction,
 } from '@solana/web3.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -27,7 +26,7 @@ import BN from 'bn.js';
 import { createBagsClient, BagsClient } from '../src/clients/BagsClient.js';
 import { createMeteoraClient, MeteoraClient } from '../src/clients/MeteoraClient.js';
 import { createHeliusClient, HeliusClient } from '../src/clients/HeliusClient.js';
-import type { ClaimablePosition, ClaimTransaction, PoolState, PositionState, DepositQuote } from '../src/types/index.js';
+import type { ClaimablePosition, PoolState, PositionState, DepositQuote } from '../src/types/index.js';
 
 // ============================================
 // Types
@@ -998,7 +997,6 @@ async function runLiquidityAndLockPhase(
   const remainingSolAmount = totalClaimed / BigInt(2);
   
   // Determine which token is SOL in the pool
-  const SOL_MINT_PUBKEY = new PublicKey(SOL_MINT);
   const isTokenASol = poolState.tokenAMint.toString() === SOL_MINT;
 
   const tokenAAmount = isTokenASol ? remainingSolAmount : swapOutputAmount;
@@ -1294,7 +1292,7 @@ async function verifyAndDocument(
     'Starting verification and documentation'
   );
 
-  let verificationResult: VerificationResult = {
+  const verificationResult: VerificationResult = {
     success: false,
     permanentLockedLiquidity: BigInt(0),
   };

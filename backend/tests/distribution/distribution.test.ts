@@ -24,7 +24,6 @@ import type { Strategy, TokenHolder } from '../../src/types/index.js';
 
 const MINT = new PublicKey('So11111111111111111111111111111111111111112');
 const OWNER = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
-const OWNER_PUBKEY = new PublicKey(OWNER);
 
 function createMockSender(): TransactionSender {
   let counter = 0;
@@ -127,7 +126,7 @@ function createContext(overrides?: Partial<PhaseContext>): PhaseContext {
  * Generate mock token holders with given balances.
  */
 function generateHolders(balances: number[]): TokenHolder[] {
-  return balances.map((balance, i) => ({
+  return balances.map((balance) => ({
     address: Keypair.generate().publicKey.toBase58(),
     owner: Keypair.generate().publicKey.toBase58(),
     balance: new BN(balance),

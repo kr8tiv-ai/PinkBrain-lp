@@ -12,7 +12,6 @@
 
 import type { Strategy, CompoundingRun, RunState } from '../types/index.js';
 import { stateMachine } from './StateMachine.js';
-import type { Database } from '../services/Database.js';
 import type { EngineConfig, PhaseContext } from './types.js';
 import { executeClaimPhase } from './phases/claim.js';
 import { executeSwapPhase } from './phases/swap.js';

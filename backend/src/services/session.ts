@@ -47,8 +47,8 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return cookies;
 }
 
-export function getSessionCookieName(): string {
-  return SESSION_COOKIE_NAME;
+export function getSessionCookieName(config?: Pick<Config, 'nodeEnv'>): string {
+  return config ? resolveSessionCookieName(config) : SESSION_COOKIE_NAME;
 }
 
 export function getCsrfHeaderName(): string {
@@ -124,13 +124,16 @@ export function verifySessionToken(
 
 export function getSessionFromRequest(
   request: FastifyRequest,
-  config: Pick<Config, 'sessionSecret'>,
+  config: Pick<Config, 'nodeEnv' | 'sessionSecret'>,
 ): SessionPayload | null {
   const cookies = parseCookies(request.headers.cookie);
-  return verifySessionToken(cookies[SESSION_COOKIE_NAME], config);
+  return verifySessionToken(cookies[resolveSessionCookieName(config)], config);
 }
 
-export function requestHasValidSession(request: FastifyRequest, config: Pick<Config, 'sessionSecret'>): boolean {
+export function requestHasValidSession(
+  request: FastifyRequest,
+  config: Pick<Config, 'nodeEnv' | 'sessionSecret'>,
+): boolean {
   return getSessionFromRequest(request, config) !== null;
 }
 
@@ -154,7 +157,7 @@ export function hasValidCsrfToken(
 export function setSessionCookie(reply: FastifyReply, token: string, config: Config): void {
   const sameSite = config.nodeEnv === 'production' ? 'None' : 'Lax';
   const parts = [
-    `${SESSION_COOKIE_NAME}=${token}`,
+    `${resolveSessionCookieName(config)}=${token}`,
     'Path=/',
     'HttpOnly',
     `Max-Age=${config.sessionTtlHours * 60 * 60}`,
@@ -162,6 +165,7 @@ export function setSessionCookie(reply: FastifyReply, token: string, config: Con
   ];
   if (config.nodeEnv === 'production') {
     parts.push('Secure');
+    parts.push('Partitioned');
   }
   reply.header('Set-Cookie', parts.join('; '));
 }
@@ -169,7 +173,7 @@ export function setSessionCookie(reply: FastifyReply, token: string, config: Con
 export function clearSessionCookie(reply: FastifyReply, config: Config): void {
   const sameSite = config.nodeEnv === 'production' ? 'None' : 'Lax';
   const parts = [
-    `${SESSION_COOKIE_NAME}=`,
+    `${resolveSessionCookieName(config)}=`,
     'Path=/',
     'HttpOnly',
     'Max-Age=0',
@@ -177,6 +181,13 @@ export function clearSessionCookie(reply: FastifyReply, config: Config): void {
   ];
   if (config.nodeEnv === 'production') {
     parts.push('Secure');
+    parts.push('Partitioned');
   }
   reply.header('Set-Cookie', parts.join('; '));
+}
+
+function resolveSessionCookieName(config: Pick<Config, 'nodeEnv'>): string {
+  return config.nodeEnv === 'production'
+    ? `__Host-${SESSION_COOKIE_NAME}`
+    : SESSION_COOKIE_NAME;
 }

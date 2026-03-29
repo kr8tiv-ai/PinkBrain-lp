@@ -8,12 +8,13 @@
     "dev": "vite",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "eslint src --ext .ts,.tsx",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",
-    "lucide-react": "^0.468.0",
+    "lucide-react": "^1.7.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.0"

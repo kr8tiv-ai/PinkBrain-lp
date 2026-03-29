@@ -25,7 +25,7 @@ PinkBrain LP is a [Bags.fm App Store](https://bags.fm) application that transfor
 **The loop:**
 
 ```
-Bags.fm fees accrue  -->  Hit 7 SOL threshold  -->  Claim
+Bags.fm fees accrue  -->  Hit configured claim threshold (default 7 SOL)  -->  Claim
         |
         v
 Swap into Token A + Token B (your choice)
@@ -62,7 +62,7 @@ Most token projects collect fees and let them sit. PinkBrain converts those fees
 ## How It Works
 
 ### 1. Fee Claiming
-PinkBrain monitors your Bags.fm fee positions. When the total claimable amount crosses the **7 SOL threshold**, it triggers a claim through the Bags API.
+PinkBrain monitors your Bags.fm fee positions. When the total claimable amount crosses the configured claim threshold, it triggers a claim through the Bags API. The repository defaults that operator threshold to **7 SOL**, but treats it as configuration rather than a hard protocol fact.
 
 ### 2. Token Swaps
 Claimed SOL is swapped into your two selected tokens via the Bags trade API (ensures Bags platform fee compliance). You can change tokens at any time -- future compounds will use the new pair.
@@ -97,9 +97,10 @@ npm run backend
 BAGS_API_KEY=your_bags_api_key        # Required - from Bags.fm
 HELIUS_API_KEY=your_helius_api_key    # Optional - enhanced RPC + DAS API
 API_AUTH_TOKEN=change_me              # Required - operator login + direct API access
-SESSION_SECRET=change_me_too          # Recommended - signs HttpOnly browser sessions
+SESSION_SECRET=change_me_too          # Required in production - signs HttpOnly browser sessions
+BOOTSTRAP_TOKEN_SECRET=change_me      # Required in production - signs short-lived bootstrap tokens
 SOLANA_NETWORK=mainnet-beta           # or devnet
-FEE_THRESHOLD_SOL=7                   # minimum SOL before claiming triggers
+FEE_THRESHOLD_SOL=7                   # default minimum SOL before claiming triggers
 NODE_ENV=development
 LOG_LEVEL=info
 ```
@@ -117,7 +118,9 @@ npm run bootstrap-token -w backend -- --frontend-url http://localhost:5173
 2. Open the generated link or paste the bootstrap token into the React dashboard.
 3. The frontend exchanges that token for a signed HttpOnly session cookie via `POST /api/auth/bootstrap/exchange`.
 
-The browser never needs the long-lived `API_AUTH_TOKEN`, and cookie-authenticated writes also require a matching CSRF header plus a trusted `Origin`.
+The browser never needs the long-lived `API_AUTH_TOKEN`, and cookie-authenticated writes also require a matching CSRF header plus a trusted `Origin`. In production the session cookie is issued as a `__Host-` cookie with `Secure`, `SameSite=None`, and `Partitioned` attributes so embedded operator sessions stay isolated and deployment mistakes around cookie scope are harder to make.
+
+If the frontend is deployed on a different origin from the backend, update [frontend/vercel.json](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/frontend/vercel.json) so the CSP `connect-src` directive includes the real API origin. Same-origin proxying is the cleanest production layout.
 
 Public health surface:
 
@@ -170,7 +173,7 @@ Protected operational surface:
 | Operator Auth | **HttpOnly session + bootstrap exchange** | Short-lived browser bootstrap tokens avoid exposing the long-lived backend secret |
 | Signing | **Remote signer boundary** | Main backend can run without local long-lived key material; break-glass export stays disabled by default |
 | RPC | **Helius** | Priority fees, DAS API for holder snapshots |
-| Storage | **SQLite** (hackathon) | Simple, zero-config; PostgreSQL planned for production |
+| Storage | **SQLite** | Simple, zero-config operator deployment; PostgreSQL remains the scale-out path |
 
 ---
 
@@ -216,8 +219,7 @@ PinkBrain-lp/
       test-cycle.ts     Manual compounding cycle test
     tests/
       BagsClient.test.ts
-  frontend/             React UI for Bags App Store (Phase 3)
-  .planning/            Project docs, requirements, roadmap
+  frontend/             React UI for the operator control plane
 ```
 
 ---
@@ -293,7 +295,7 @@ You must also set `ALLOW_AGENT_WALLET_EXPORT=true` before the backend will accep
 | RPC | Helius (priority fees + DAS API) |
 | Backend | Node.js 20+, TypeScript 5.3 |
 | Frontend | React (Bags App Store embed) |
-| Database | SQLite (hackathon) / PostgreSQL (production) |
+| Database | SQLite now / PostgreSQL when scale demands it |
 | Testing | Vitest |
 | Logging | Pino |
 
@@ -302,7 +304,6 @@ You must also set `ALLOW_AGENT_WALLET_EXPORT=true` before the backend will accep
 ## Links
 
 - [Bags.fm](https://bags.fm) -- platform
-- [Bags Hackathon](https://bags.fm/hackathon) -- $4M in builder funding
 - [Meteora Docs](https://docs.meteora.ag) -- DAMM v2 protocol
 - [Helius Docs](https://docs.helius.dev) -- RPC + DAS API
 - [Solana Docs](https://solana.com/docs)

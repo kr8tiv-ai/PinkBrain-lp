@@ -13,29 +13,16 @@
  * - DEVNET_WALLET_PRIVATE_KEY: Required for transaction tests (base58 encoded)
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Connection, PublicKey, Keypair } from '@solana/web3.js';
-import { MeteoraClient, createMeteoraClient, MeteoraClientError, DAMM_V2_PROGRAM_ID, TxBuilder } from '../../src/clients/MeteoraClient.js';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { MeteoraClient, createMeteoraClient, MeteoraClientError, DAMM_V2_PROGRAM_ID } from '../../src/clients/MeteoraClient.js';
 import BN from 'bn.js';
 
 // Skip tests if no RPC URL is configured
 const RPC_URL = process.env.SOLANA_RPC_URL || process.env.HELIUS_RPC_URL;
 const shouldRunTests = !!RPC_URL;
-
-// Transaction tests require a wallet private key
-const WALLET_PRIVATE_KEY = process.env.DEVNET_WALLET_PRIVATE_KEY;
-const shouldRunTxTests = !!WALLET_PRIVATE_KEY;
-
-// Helper to load wallet from private key
-async function loadWallet(privateKeyBase58: string): Promise<Keypair> {
-  // For base58 encoded private key
-  const bs58 = await import('bs58');
-  const privateKeyBytes = bs58.default.decode(privateKeyBase58);
-  return Keypair.fromSecretKey(privateKeyBytes);
-}
-
-// Known DAMM v2 pool addresses for testing (mainnet)
-const KNOWN_POOL_ADDRESS = 'Ga3t6xYuB9dsHqDz2pGM8hC9qZoKLqPqQ7Y1GtqNFk5P'; // Example pool
+const DEVNET_WALLET_PRIVATE_KEY = process.env.DEVNET_WALLET_PRIVATE_KEY;
+const shouldRunTxTests = shouldRunTests && !!DEVNET_WALLET_PRIVATE_KEY;
 
 describe.skipIf(!shouldRunTests)('MeteoraClient', () => {
   let connection: Connection;
@@ -234,16 +221,6 @@ describe.skipIf(!shouldRunTests)('MeteoraClient', () => {
 
   describe('logging', () => {
     it('should have structured logging enabled', async () => {
-      // Create a client with custom logger to capture logs
-      const logs: unknown[] = [];
-      const { pino } = await import('pino');
-      
-      const testLogger = pino({
-        level: 'debug',
-      }, {
-        write: (msg) => logs.push(JSON.parse(msg)),
-      });
-      
       // The client should log operations
       const pools = await client.getAllPools();
       expect(pools.length).toBeGreaterThan(0);

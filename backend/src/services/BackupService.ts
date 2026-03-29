@@ -6,7 +6,7 @@
  */
 
 import { copyFileSync, mkdirSync, readdirSync, unlinkSync, statSync } from 'node:fs';
-import { resolve, basename } from 'node:path';
+import { resolve } from 'node:path';
 import type { Database } from './Database.js';
 
 export interface BackupConfig {

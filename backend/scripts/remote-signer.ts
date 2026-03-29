@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Keypair, Connection } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 import { createKeypairTransactionSender } from '../src/services/KeypairTransactionSender.js';
 import { createRemoteSignerApp } from '../src/services/RemoteSignerApp.js';
 

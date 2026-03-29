@@ -6,6 +6,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { RemoteSignerRequest } from './RemoteTransactionSender.js';
 import type { TransactionSender } from '../engine/types.js';
 import { hasValidAuthorizationHeader } from './session.js';
+import { applyApiSecurityHeaders } from '../api/securityHeaders.js';
 
 const RequestSchema = z.object({
   serializedTx: z.string().min(1),
@@ -53,6 +54,11 @@ export async function createRemoteSignerApp({
 }) {
   const app = Fastify({ logger });
   await app.register(rateLimit, GLOBAL_REMOTE_SIGNER_RATE_LIMIT);
+
+  app.addHook('onSend', async (_request, reply, payload) => {
+    applyApiSecurityHeaders(reply);
+    return payload;
+  });
 
   app.get('/health', { config: { rateLimit: HEALTH_RATE_LIMIT } }, async () => ({
     status: 'ok',

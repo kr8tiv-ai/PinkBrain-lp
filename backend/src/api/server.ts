@@ -7,6 +7,7 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import type { ApiContext } from './context.js';
 import { GLOBAL_API_RATE_LIMIT } from './rateLimits.js';
+import { applyApiSecurityHeaders } from './securityHeaders.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerStrategyRoutes } from './routes/strategies.js';
@@ -176,6 +177,11 @@ export async function createServer(ctx: ApiContext) {
       error: 'InternalError',
       message: 'An unexpected error occurred',
     });
+  });
+
+  app.addHook('onSend', async (_request, reply, payload) => {
+    applyApiSecurityHeaders(reply);
+    return payload;
   });
 
   // Structured request/response logging (skip noisy health checks)

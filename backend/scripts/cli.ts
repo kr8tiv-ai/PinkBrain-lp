@@ -14,7 +14,6 @@ import { createRunService } from '../src/engine/RunService.js';
 import { createAuditService } from '../src/engine/AuditService.js';
 import type { AuditService } from '../src/engine/AuditService.js';
 import type { RunService } from '../src/engine/RunService.js';
-import type { Engine } from '../src/engine/Engine.js';
 import { createStrategyService } from '../src/services/StrategyService.js';
 import { StrategyValidationError, StrategyNotFoundError, RunNotFoundError, RunStateError } from '../src/services/errors.js';
 import { Connection } from '@solana/web3.js';

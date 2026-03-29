@@ -53,6 +53,6 @@ The real fix is an upstream validation and upgrade campaign:
 
 ## Operator Guidance
 
-For hackathon and demo use, the repo is now materially safer than it started.
+For development and controlled operator use, the repo is materially safer than it started.
 
 For production use, treat the remaining advisories as a known risk register item and re-validate before launch.

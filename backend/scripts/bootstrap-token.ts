@@ -19,6 +19,10 @@ program
   .option('--frontend-url <url>', 'Optional frontend URL to print as a one-click sign-in link')
   .option('--json', 'Print JSON instead of plain text', false)
   .action((options) => {
+    if (process.env.NODE_ENV === 'production' && !process.env.BOOTSTRAP_TOKEN_SECRET?.trim()) {
+      throw new Error('BOOTSTRAP_TOKEN_SECRET must be explicitly configured in production');
+    }
+
     const bootstrapTokenSecret = requiredEnv(
       'BOOTSTRAP_TOKEN_SECRET',
       process.env.SESSION_SECRET ?? process.env.API_AUTH_TOKEN,

@@ -29,6 +29,16 @@ export const STATS_RATE_LIMIT = {
   timeWindow: '1 minute',
 } as const;
 
+export const STRATEGY_MUTATION_RATE_LIMIT = {
+  max: 20,
+  timeWindow: '1 minute',
+} as const;
+
+export const RUN_RESUME_RATE_LIMIT = {
+  max: 10,
+  timeWindow: '1 minute',
+} as const;
+
 export const VALIDATION_PUBLIC_KEY_RATE_LIMIT = {
   max: 60,
   timeWindow: '1 minute',

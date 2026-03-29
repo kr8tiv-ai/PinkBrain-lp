@@ -2,7 +2,6 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Connection } from '@solana/web3.js';
 import type { Config } from '../src/config/index.js';
 import { createServer } from '../src/api/server.js';
 import { createBootstrapToken } from '../src/services/bootstrapAuth.js';
@@ -113,6 +112,31 @@ afterEach(async () => {
 });
 
 describe('session auth and public/private health endpoints', () => {
+  it('adds defensive security headers to API responses', async () => {
+    const { app } = await createTestApp();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/liveness',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['referrer-policy']).toBe('no-referrer');
+    expect(response.headers['x-frame-options']).toBe('DENY');
+    expect(response.headers['content-security-policy']).toBe(
+      "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+    );
+    expect(response.headers['permissions-policy']).toBe(
+      'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()',
+    );
+    expect(response.headers['x-permitted-cross-domain-policies']).toBe('none');
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers.pragma).toBe('no-cache');
+
+    await app.close();
+  });
+
   it('exposes public liveness without auth', async () => {
     const { app } = await createTestApp();
 
@@ -204,6 +228,34 @@ describe('session auth and public/private health endpoints', () => {
     await app.close();
   });
 
+  it('issues hardened production session cookies for bootstrap sessions', async () => {
+    const { app, config } = await createTestApp({
+      nodeEnv: 'production',
+      sessionSecret: 'production-session-secret',
+      bootstrapTokenSecret: 'production-bootstrap-secret',
+    });
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/bootstrap/exchange',
+      payload: { bootstrapToken: createBootstrapToken(config) },
+    });
+
+    expect(login.statusCode).toBe(200);
+    const cookie = Array.isArray(login.headers['set-cookie'])
+      ? login.headers['set-cookie'][0]
+      : login.headers['set-cookie'];
+
+    expect(cookie).toContain('__Host-pinkbrain_session=');
+    expect(cookie).toContain('Path=/');
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('Secure');
+    expect(cookie).toContain('SameSite=None');
+    expect(cookie).toContain('Partitioned');
+
+    await app.close();
+  });
+
   it('reports browser session state without requiring auth', async () => {
     const { app, config } = await createTestApp();
 
@@ -233,6 +285,7 @@ describe('session auth and public/private health endpoints', () => {
       authenticated: true,
       csrfToken: expect.any(String),
     });
+    expect(after.headers['cache-control']).toBe('no-store');
 
     await app.close();
   });

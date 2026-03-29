@@ -114,6 +114,48 @@ afterEach(async () => {
 });
 
 describe('API rate limits', () => {
+  it('rate limits repeated strategy creation attempts', async () => {
+    const { app, config } = await createTestApp();
+    const payload = {
+      ownerWallet: '11111111111111111111111111111111',
+      source: 'CLAIMABLE_POSITIONS',
+      targetTokenA: 'So11111111111111111111111111111111111111112',
+      targetTokenB: 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',
+      distributionToken: 'So11111111111111111111111111111111111111112',
+      swapConfig: {
+        slippageBps: 50,
+      },
+      meteoraConfig: {},
+      distribution: 'OWNER_ONLY',
+      exclusionList: [],
+      schedule: '0 * * * *',
+      minCompoundThreshold: 7,
+    };
+
+    let response = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      headers: {
+        authorization: `Bearer ${config.apiAuthToken}`,
+      },
+      payload,
+    });
+
+    for (let attempt = 1; attempt < 21; attempt += 1) {
+      response = await app.inject({
+        method: 'POST',
+        url: '/api/strategies',
+        headers: {
+          authorization: `Bearer ${config.apiAuthToken}`,
+        },
+        payload,
+      });
+    }
+
+    expect(response.statusCode).toBe(429);
+    await app.close();
+  });
+
   it('applies the global API rate limit to protected routes', async () => {
     const { app, config } = await createTestApp();
     let response = await app.inject({
@@ -190,6 +232,30 @@ describe('API rate limits', () => {
       response = await app.inject({
         method: 'GET',
         url: '/api/stats',
+        headers: {
+          authorization: `Bearer ${config.apiAuthToken}`,
+        },
+      });
+    }
+
+    expect(response.statusCode).toBe(429);
+    await app.close();
+  });
+
+  it('rate limits repeated run resume attempts', async () => {
+    const { app, config } = await createTestApp();
+    let response = await app.inject({
+      method: 'POST',
+      url: '/api/runs/run-123/resume',
+      headers: {
+        authorization: `Bearer ${config.apiAuthToken}`,
+      },
+    });
+
+    for (let attempt = 1; attempt < 11; attempt += 1) {
+      response = await app.inject({
+        method: 'POST',
+        url: '/api/runs/run-123/resume',
         headers: {
           authorization: `Bearer ${config.apiAuthToken}`,
         },

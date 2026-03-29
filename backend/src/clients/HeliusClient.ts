@@ -391,7 +391,7 @@ export class HeliusClient {
    * Create a webhook to monitor account changes
    * Note: This requires Helius webhook API (separate from RPC)
    */
-  async createWebhook(params: {
+  async createWebhook(_params: {
     webhookURL: string;
     accountAddresses: string[];
     transactionTypes?: string[];

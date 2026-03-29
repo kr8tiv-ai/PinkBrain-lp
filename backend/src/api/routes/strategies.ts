@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import type { ApiContext } from '../context.js';
+import { STRATEGY_MUTATION_RATE_LIMIT } from '../rateLimits.js';
 import { StrategyValidationError } from '../../services/errors.js';
 import type { StrategyCreateInput, StrategyUpdateInput } from '../../services/StrategyService.js';
 
@@ -99,17 +100,22 @@ export function registerStrategyRoutes(app: FastifyInstance, ctx: ApiContext): v
   );
 
   // Create strategy
-  app.post('/api/strategies', async (request, reply) => {
-    const body = parseBody(CreateStrategySchema, request.body) as unknown as StrategyCreateInput;
-    const strategy = await strategyService.createStrategy(body);
-    scheduler.scheduleStrategy(strategy);
-    reply.code(201);
-    return strategy;
-  });
+  app.post(
+    '/api/strategies',
+    { config: { rateLimit: STRATEGY_MUTATION_RATE_LIMIT } },
+    async (request, reply) => {
+      const body = parseBody(CreateStrategySchema, request.body) as unknown as StrategyCreateInput;
+      const strategy = await strategyService.createStrategy(body);
+      scheduler.scheduleStrategy(strategy);
+      reply.code(201);
+      return strategy;
+    },
+  );
 
   // Update strategy
   app.patch<{ Params: { id: string } }>(
     '/api/strategies/:id',
+    { config: { rateLimit: STRATEGY_MUTATION_RATE_LIMIT } },
     async (request) => {
       const body = parseBody(UpdateStrategySchema, request.body) as unknown as StrategyUpdateInput;
       const updated = await strategyService.updateStrategy(
@@ -126,6 +132,7 @@ export function registerStrategyRoutes(app: FastifyInstance, ctx: ApiContext): v
   // Delete strategy
   app.delete<{ Params: { id: string } }>(
     '/api/strategies/:id',
+    { config: { rateLimit: STRATEGY_MUTATION_RATE_LIMIT } },
     async (request, reply) => {
       await strategyService.deleteStrategy(request.params.id);
       reply.code(204);
@@ -145,6 +152,7 @@ export function registerStrategyRoutes(app: FastifyInstance, ctx: ApiContext): v
   // Pause strategy
   app.post<{ Params: { id: string } }>(
     '/api/strategies/:id/pause',
+    { config: { rateLimit: STRATEGY_MUTATION_RATE_LIMIT } },
     async (request) => {
       return strategyService.updateStrategy(request.params.id, {
         status: 'PAUSED',
@@ -155,6 +163,7 @@ export function registerStrategyRoutes(app: FastifyInstance, ctx: ApiContext): v
   // Resume strategy
   app.post<{ Params: { id: string } }>(
     '/api/strategies/:id/resume',
+    { config: { rateLimit: STRATEGY_MUTATION_RATE_LIMIT } },
     async (request) => {
       const updated = await strategyService.updateStrategy(request.params.id, {
         status: 'ACTIVE',
