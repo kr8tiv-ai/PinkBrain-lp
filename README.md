@@ -55,6 +55,7 @@ Most token projects collect fees and let them sit. PinkBrain converts those fees
 - **Holder distribution** -- route LP fee income to your top 100 holders automatically
 - **Any token pair** -- not limited to your own token; pick any two SPL tokens on Solana
 - **Operator-safe UI** -- browser sessions use signed HttpOnly cookies instead of persisting the backend bearer token in app state
+- **Live operator feedback** -- the UI previews the next run, lifetime claimed totals, recent failures, and real-time validation before a strategy is saved
 
 ---
 
@@ -127,6 +128,11 @@ Protected operational surface:
 
 - `GET /api/readiness`
 - `GET /api/stats`
+- `GET /api/strategies/insights`
+- `GET /api/strategies/:id/insights`
+- `GET /api/validation/public-key`
+- `GET /api/validation/token-mint`
+- `GET /api/validation/schedule`
 - strategy and run CRUD endpoints
 
 ---

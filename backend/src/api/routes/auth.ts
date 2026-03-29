@@ -2,6 +2,12 @@ import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import type { ApiContext } from '../context.js';
 import {
+  AUTH_BOOTSTRAP_RATE_LIMIT,
+  AUTH_LOGIN_RATE_LIMIT,
+  AUTH_LOGOUT_RATE_LIMIT,
+  AUTH_SESSION_RATE_LIMIT,
+} from '../rateLimits.js';
+import {
   clearSessionCookie,
   createSessionToken,
   getSessionFromRequest,
@@ -19,7 +25,7 @@ const BootstrapExchangeSchema = z.object({
 }).strict();
 
 export function registerAuthRoutes(app: FastifyInstance, ctx: ApiContext): void {
-  app.get('/api/auth/session', async (request) => {
+  app.get('/api/auth/session', { config: { rateLimit: AUTH_SESSION_RATE_LIMIT } }, async (request) => {
     const session = getSessionFromRequest(request, ctx.config);
     if (!session) {
       return { authenticated: false };
@@ -31,7 +37,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: ApiContext): void 
     };
   });
 
-  app.post('/api/auth/login', async (request, reply) => {
+  app.post('/api/auth/login', { config: { rateLimit: AUTH_LOGIN_RATE_LIMIT } }, async (request, reply) => {
     const parsed = LoginSchema.safeParse(request.body);
     if (!parsed.success || !ctx.config.apiAuthToken) {
       reply.code(401).send({
@@ -62,7 +68,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: ApiContext): void 
     return { authenticated: true, csrfToken: session.csrfToken };
   });
 
-  app.post('/api/auth/bootstrap/exchange', async (request, reply) => {
+  app.post('/api/auth/bootstrap/exchange', { config: { rateLimit: AUTH_BOOTSTRAP_RATE_LIMIT } }, async (request, reply) => {
     const parsed = BootstrapExchangeSchema.safeParse(request.body);
     if (!parsed.success) {
       reply.code(401).send({
@@ -86,7 +92,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: ApiContext): void 
     return { authenticated: true, csrfToken: session.csrfToken };
   });
 
-  app.post('/api/auth/logout', async (_request, reply) => {
+  app.post('/api/auth/logout', { config: { rateLimit: AUTH_LOGOUT_RATE_LIMIT } }, async (_request, reply) => {
     clearSessionCookie(reply, ctx.config);
     return { authenticated: false };
   });

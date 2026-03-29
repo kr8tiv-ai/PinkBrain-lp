@@ -459,7 +459,19 @@ Fastify HTTP server with CORS configured for `localhost:5173` (dev) and `*.bags.
 | Method | Endpoint | Handler | Description |
 |--------|----------|---------|-------------|
 | `GET` | `/api/health` | [`health.ts`](https://github.com/kr8tiv-ai/PinkBrain-lp/blob/main/backend/src/api/routes/health.ts) | Health check + scheduled strategy count |
+| `GET` | `/api/liveness` | [`health.ts`](https://github.com/kr8tiv-ai/PinkBrain-lp/blob/main/backend/src/api/routes/health.ts) | Public liveness probe for uptime checks |
+| `GET` | `/api/readiness` | [`health.ts`](https://github.com/kr8tiv-ai/PinkBrain-lp/blob/main/backend/src/api/routes/health.ts) | Authenticated runtime + dependency readiness snapshot |
 | `GET` | `/api/stats` | [`stats.ts`](https://github.com/kr8tiv-ai/PinkBrain-lp/blob/main/backend/src/api/routes/stats.ts) | Aggregate stats (total runs, success rate, etc.) |
+| `GET` | `/api/strategies/insights` | [`strategies.ts`](https://github.com/kr8tiv-ai/PinkBrain-lp/blob/main/backend/src/api/routes/strategies.ts) | Derived dashboard summaries: next run, last run, lifetime totals |
+| `GET` | `/api/strategies/:id/insights` | [`strategies.ts`](https://github.com/kr8tiv-ai/PinkBrain-lp/blob/main/backend/src/api/routes/strategies.ts) | Per-strategy derived runtime summary |
+
+### Validation Endpoints
+
+| Method | Endpoint | Handler | Description |
+|--------|----------|---------|-------------|
+| `GET` | `/api/validation/public-key` | [`validation.ts`](https://github.com/kr8tiv-ai/PinkBrain-lp/blob/main/backend/src/api/routes/validation.ts) | Validate and normalize a Solana public key |
+| `GET` | `/api/validation/token-mint` | [`validation.ts`](https://github.com/kr8tiv-ai/PinkBrain-lp/blob/main/backend/src/api/routes/validation.ts) | Confirm a mint exists on-chain and return parsed mint metadata |
+| `GET` | `/api/validation/schedule` | [`validation.ts`](https://github.com/kr8tiv-ai/PinkBrain-lp/blob/main/backend/src/api/routes/validation.ts) | Validate schedule syntax and preview the next run |
 
 ### Error Mapping
 
@@ -531,6 +543,7 @@ React 19 + React Router + TanStack Query. Three routes:
 
 - **Stats row:** Total strategies, active count, total runs, success rate
 - **Strategy table:** Token pair, status badge, schedule, last updated, pause/resume/view controls
+- **Operator snapshots:** Next scheduled run, lifetime claimed SOL, recent failure code, recipient count
 - **Empty state:** CTA to create first strategy
 
 ### Strategy Creation Wizard
@@ -541,10 +554,10 @@ React 19 + React Router + TanStack Query. Three routes:
 
 | Step | Fields | Validation |
 |------|--------|------------|
-| 1. Tokens | Owner wallet, Token A mint, Token B mint, fee source | Tokens must differ |
-| 2. Pool Config | Pool address (optional), slippage bps, max price impact, base fee | Base fee > 0 |
-| 3. Distribution | Mode toggle (Owner Only / Top 100), distribution token, exclusion list | — |
-| 4. Schedule | Cron expression, min compound threshold (SOL) | Valid 5-field cron |
+| 1. Tokens | Owner wallet, Token A mint, Token B mint, fee source | Tokens must differ, wallet format valid, token mints must exist |
+| 2. Pool Config | Pool address (optional), slippage bps, max price impact, base fee | Base fee > 0, pool address valid when provided |
+| 3. Distribution | Mode toggle (Owner Only / Top 100), distribution token, exclusion list | Distribution token mint validated when holder distribution is enabled |
+| 4. Schedule | Cron expression, min compound threshold (SOL) | Valid 5-field cron, minimum interval enforced, next run preview shown |
 | 5. Review | Summary + permanent lock warning with confirmation checkbox | Must confirm lock |
 
 **Permanent lock warning** prominently displays that locking is irreversible and requires explicit checkbox confirmation.
@@ -554,6 +567,7 @@ React 19 + React Router + TanStack Query. Three routes:
 **Source:** [`frontend/src/pages/StrategyDetailPage.tsx`](https://github.com/kr8tiv-ai/PinkBrain-lp/blob/main/frontend/src/pages/StrategyDetailPage.tsx)
 
 - Strategy configuration (token pair, schedule, distribution mode, threshold)
+- Derived runtime summary (next run, lifetime claimed, locked liquidity, recipients served)
 - Pool explorer link (Solscan)
 - Pause/Resume/Run Now controls
 - **Run history table** — status badge, timestamps, claimed amount, error code

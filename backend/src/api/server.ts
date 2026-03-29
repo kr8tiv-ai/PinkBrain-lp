@@ -6,6 +6,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import type { ApiContext } from './context.js';
+import { GLOBAL_API_RATE_LIMIT } from './rateLimits.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerStrategyRoutes } from './routes/strategies.js';
@@ -37,6 +38,13 @@ export async function createServer(ctx: ApiContext) {
     '/api/auth/session',
     '/api/auth/bootstrap/exchange',
   ]);
+  const getRequestPath = (url: string): string => {
+    try {
+      return new URL(url, 'http://localhost').pathname;
+    } catch {
+      return url;
+    }
+  };
   const isAllowedOrigin = (origin: string | undefined): boolean => {
     if (!origin) {
       return false;
@@ -55,10 +63,7 @@ export async function createServer(ctx: ApiContext) {
   };
 
   // Global rate limiting
-  await app.register(rateLimit, {
-    max: 120,
-    timeWindow: '1 minute',
-  });
+  await app.register(rateLimit, GLOBAL_API_RATE_LIMIT);
 
   await app.register(cors, {
     origin: (origin, cb) => {
@@ -74,7 +79,9 @@ export async function createServer(ctx: ApiContext) {
   });
 
   app.addHook('onRequest', async (request, reply) => {
-    if (request.method === 'OPTIONS' || publicRoutes.has(request.url)) {
+    const requestPath = getRequestPath(request.url);
+
+    if (request.method === 'OPTIONS' || publicRoutes.has(requestPath)) {
       return;
     }
 
@@ -120,6 +127,13 @@ export async function createServer(ctx: ApiContext) {
   });
 
   app.setErrorHandler((error, _request, reply) => {
+    if ((error as { statusCode?: number }).statusCode === 429) {
+      return reply.code(429).send({
+        error: 'RateLimitExceeded',
+        message: error instanceof Error ? error.message : 'Too many requests',
+      });
+    }
+
     if (error instanceof StrategyValidationError) {
       return reply.code(400).send({
         error: 'ValidationError',
@@ -166,10 +180,11 @@ export async function createServer(ctx: ApiContext) {
 
   // Structured request/response logging (skip noisy health checks)
   app.addHook('onResponse', async (request, reply) => {
-    if (request.url === '/api/health' || request.url === '/api/liveness') return;
+    const requestPath = getRequestPath(request.url);
+    if (requestPath === '/api/health' || requestPath === '/api/liveness') return;
     app.log.info({
       method: request.method,
-      url: request.url,
+      url: requestPath,
       statusCode: reply.statusCode,
       responseTimeMs: Math.round(reply.elapsedTime),
     }, 'request completed');

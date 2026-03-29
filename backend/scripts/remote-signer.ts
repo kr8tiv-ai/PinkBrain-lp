@@ -1,21 +1,8 @@
 #!/usr/bin/env node
 
-import Fastify from 'fastify';
 import { Keypair, Connection } from '@solana/web3.js';
-import { z } from 'zod';
 import { createKeypairTransactionSender } from '../src/services/KeypairTransactionSender.js';
-import type { RemoteSignerRequest } from '../src/services/RemoteTransactionSender.js';
-import { hasValidAuthorizationHeader } from '../src/services/session.js';
-
-const RequestSchema = z.object({
-  serializedTx: z.string().min(1),
-  skipPreflight: z.boolean().optional(),
-  confirmationContext: z.object({
-    blockhash: z.string().min(1),
-    lastValidBlockHeight: z.number().int().positive(),
-  }).optional(),
-  extraSignerPrivateKeys: z.array(z.string().min(1)).optional(),
-}).strict();
+import { createRemoteSignerApp } from '../src/services/RemoteSignerApp.js';
 
 function requiredEnv(key: string, fallback?: string): string {
   const value = process.env[key] ?? fallback;
@@ -23,15 +10,6 @@ function requiredEnv(key: string, fallback?: string): string {
     throw new Error(`Missing required environment variable: ${key}`);
   }
   return value;
-}
-
-function parseExtraSigner(value: string): Keypair {
-  const trimmed = value.trim();
-  if (trimmed.startsWith('[')) {
-    return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(trimmed) as number[]));
-  }
-
-  return Keypair.fromSecretKey(Buffer.from(trimmed, 'base64'));
 }
 
 async function main() {
@@ -50,39 +28,10 @@ async function main() {
     privateKey,
   });
 
-  const app = Fastify({ logger: true });
-
-  app.get('/health', async () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-  }));
-
-  app.post('/sign-and-send', async (request, reply) => {
-    if (!hasValidAuthorizationHeader(request.headers.authorization, authToken)) {
-      reply.code(401).send({
-        error: 'Unauthorized',
-        message: 'Missing or invalid remote signer token',
-      });
-      return;
-    }
-
-    const parsed = RequestSchema.safeParse(request.body);
-    if (!parsed.success) {
-      reply.code(400).send({
-        error: 'ValidationError',
-        message: 'Invalid sign-and-send payload',
-      });
-      return;
-    }
-
-    const body = parsed.data satisfies RemoteSignerRequest;
-    const response = await sender.signAndSendTransaction(body.serializedTx, {
-      skipPreflight: body.skipPreflight,
-      confirmationContext: body.confirmationContext,
-      extraSigners: body.extraSignerPrivateKeys?.map(parseExtraSigner),
-    });
-
-    return response;
+  const app = await createRemoteSignerApp({
+    authToken,
+    sender,
+    logger: true,
   });
 
   await app.listen({ host, port });

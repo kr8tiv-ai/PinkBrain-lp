@@ -237,6 +237,20 @@ describe('session auth and public/private health endpoints', () => {
     await app.close();
   });
 
+  it('keeps public auth/session access public when query params are present', async () => {
+    const { app } = await createTestApp();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/auth/session?probe=1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ authenticated: false });
+
+    await app.close();
+  });
+
   it('rejects cookie-authenticated state changes without an allowed origin or csrf token', async () => {
     const { app, config } = await createTestApp();
 

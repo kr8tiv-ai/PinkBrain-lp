@@ -4,9 +4,10 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { ApiContext } from '../context.js';
+import { STATS_RATE_LIMIT } from '../rateLimits.js';
 
 export function registerStatsRoutes(app: FastifyInstance, ctx: ApiContext): void {
-  app.get('/api/stats', async () => {
+  app.get('/api/stats', { config: { rateLimit: STATS_RATE_LIMIT } }, async () => {
     const db = ctx.db.getDb();
 
     const strategyCount = db
