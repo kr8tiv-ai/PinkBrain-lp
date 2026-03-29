@@ -339,7 +339,7 @@ export interface CompoundingRun {
     permanentLockedLiquidity: string;
   } | null;
   distribution: {
-    totalYieldClaimed: number;
+    totalYieldClaimed: string;
     recipientCount: number;
     txSignatures: string[];
   } | null;

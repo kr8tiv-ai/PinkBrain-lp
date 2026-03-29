@@ -54,7 +54,7 @@ export async function buildTop100Distribution(
 
   if (holders.length === 0) {
     return {
-      totalYieldClaimed: 0,
+      totalYieldClaimed: '0',
       recipientCount: 0,
       txSignatures: [],
     };
@@ -66,29 +66,28 @@ export async function buildTop100Distribution(
   // 3. Check source ATA balance
   const sourceAta = getAssociatedTokenAddressSync(mint, owner, false, TOKEN_PROGRAM_ID);
 
-  let totalAmount: number;
+  let totalAmount: bigint;
   try {
     const balance = await connection.getTokenAccountBalance(sourceAta);
-    totalAmount = Number(balance.value.amount);
+    totalAmount = BigInt(balance.value.amount);
   } catch {
     // ATA doesn't exist — nothing to distribute
     return {
-      totalYieldClaimed: 0,
+      totalYieldClaimed: '0',
       recipientCount: 0,
       txSignatures: [],
     };
   }
 
-  if (totalAmount === 0) {
+  if (totalAmount === 0n) {
     return {
-      totalYieldClaimed: 0,
+      totalYieldClaimed: '0',
       recipientCount: 0,
       txSignatures: [],
     };
   }
 
-  // 4. Calculate per-recipient amounts using BigInt to avoid float precision loss
-  const totalBigInt = BigInt(totalAmount);
+  // 4. Calculate per-recipient amounts using BigInt end-to-end.
   const totalBalanceBigInt = weighted.reduce(
     (sum, w) => sum + BigInt(w.balance.toString()),
     0n,
@@ -96,14 +95,14 @@ export async function buildTop100Distribution(
   const recipients: DistributionRecipient[] = weighted.map((w) => ({
     owner: w.owner,
     amount: totalBalanceBigInt > 0n
-      ? Number((BigInt(w.balance.toString()) * totalBigInt) / totalBalanceBigInt)
-      : Math.floor(w.weight * totalAmount),
+      ? (BigInt(w.balance.toString()) * totalAmount) / totalBalanceBigInt
+      : 0n,
   }));
 
   // 5. Distribute remainder to first recipient
-  const distributed = recipients.reduce((sum, r) => sum + r.amount, 0);
+  const distributed = recipients.reduce((sum, r) => sum + r.amount, 0n);
   const remainder = totalAmount - distributed;
-  if (remainder > 0 && recipients.length > 0) {
+  if (remainder > 0n && recipients.length > 0) {
     recipients[0].amount += remainder;
   }
 
@@ -112,7 +111,7 @@ export async function buildTop100Distribution(
 
   const txSignatures: string[] = [];
   for (const batch of batches) {
-    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
     const transaction = new Transaction();
     transaction.add(...batch.instructions);
     transaction.recentBlockhash = blockhash;
@@ -130,12 +129,17 @@ export async function buildTop100Distribution(
     }
 
     const base64Tx = serialized.toString('base64');
-    const { signature } = await ctx.sender.signAndSendTransaction(base64Tx);
+    const { signature } = await ctx.sender.signAndSendTransaction(base64Tx, {
+      confirmationContext: {
+        blockhash,
+        lastValidBlockHeight,
+      },
+    });
     txSignatures.push(signature);
   }
 
   return {
-    totalYieldClaimed: totalAmount,
+    totalYieldClaimed: totalAmount.toString(),
     recipientCount: recipients.length,
     txSignatures,
   };
@@ -219,7 +223,7 @@ function buildBatchInstructions(
         sourceAta,
         destAta,
         owner,
-        BigInt(recipient.amount),
+        recipient.amount,
         [],
         TOKEN_PROGRAM_ID,
       ),

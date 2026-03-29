@@ -110,17 +110,25 @@ wallet
 
 wallet
   .command('export')
-  .description('Export a Bags Agent wallet private key for backend signer use')
+  .description('Break-glass export of a Bags Agent wallet private key for backend signer use')
   .requiredOption('--token <jwt>', 'Agent JWT token', process.env.BAGS_AGENT_JWT)
   .option('--wallet <address>', 'Wallet address to export', process.env.BAGS_AGENT_WALLET_ADDRESS)
+  .option('--i-understand-this-exports-a-private-key', 'Required acknowledgement for break-glass export')
   .option('--raw-private-key', 'Print the raw private key only')
   .option('--env', 'Print a SIGNER_PRIVATE_KEY env assignment')
   .action(async (opts: {
     token: string;
     wallet?: string;
+    iUnderstandThisExportsAPrivateKey?: boolean;
     rawPrivateKey?: boolean;
     env?: boolean;
   }) => {
+    if (!opts.iUnderstandThisExportsAPrivateKey) {
+      throw new Error(
+        'Refusing wallet export without --i-understand-this-exports-a-private-key.',
+      );
+    }
+
     const client = getAgentClient();
     const walletAddress = await resolveWalletAddress(opts.token, opts.wallet);
     const { privateKey } = await client.exportWallet(opts.token, walletAddress);
@@ -138,7 +146,7 @@ wallet
     writeJson({
       walletAddress,
       privateKeyPreview: redact(privateKey, 8, 6),
-      note: 'Use --raw-private-key or --env if you need the full signer secret.',
+      note: 'Break-glass export succeeded. Use --raw-private-key or --env only when you intentionally need the full signer secret.',
     });
   });
 

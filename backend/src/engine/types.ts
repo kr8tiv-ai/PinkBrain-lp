@@ -25,9 +25,15 @@ import type { ExecutionPolicy } from './ExecutionPolicy.js';
  * The Bags Agent runtime provides the real implementation;
  * tests provide mocks.
  */
+export interface TransactionConfirmationContext {
+  blockhash: string;
+  lastValidBlockHeight: number;
+}
+
 export interface SendTransactionOptions {
   extraSigners?: Signer[];
   skipPreflight?: boolean;
+  confirmationContext?: TransactionConfirmationContext;
 }
 
 export interface TransactionSender {
@@ -86,7 +92,7 @@ export interface LockPhaseResult {
 }
 
 export interface DistributionPhaseResult {
-  totalYieldClaimed: number;
+  totalYieldClaimed: string;
   recipientCount: number;
   txSignatures: string[];
 }

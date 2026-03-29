@@ -125,7 +125,7 @@ export function StrategyDetailPage() {
               )}
               {health.dependencies.agentAuth.status === 'partial' && (
                 <p className="mt-2 text-xs text-orange-200/80">
-                  Bags Agent auth is only partially configured. Set both the JWT and a resolvable wallet before relying on agent-backed execution.
+                  Bags Agent auth is only partially configured. Set both the JWT and a resolvable wallet before relying on the break-glass agent signer fallback.
                 </p>
               )}
             </div>
@@ -158,7 +158,7 @@ export function StrategyDetailPage() {
                   Bags Agent
                 </div>
                 <p className="mt-1 text-gray-300">
-                  {health.dependencies.agentAuth.status === 'configured' && 'Configured for backend export'}
+                  {health.dependencies.agentAuth.status === 'configured' && 'Configured for break-glass agent export'}
                   {health.dependencies.agentAuth.status === 'partial' && 'Needs wallet selection or JWT'}
                   {health.dependencies.agentAuth.status === 'missing' && 'Not configured'}
                 </p>

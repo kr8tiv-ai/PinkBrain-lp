@@ -65,7 +65,7 @@ export interface CompoundingRun {
     permanentLockedLiquidity: string;
   } | null;
   distribution: {
-    totalYieldClaimed: number;
+    totalYieldClaimed: string;
     recipientCount: number;
     txSignatures: string[];
   } | null;
@@ -102,6 +102,9 @@ export interface HealthSnapshot {
   status: 'ok' | 'degraded';
   version: string;
   timestamp: string;
+}
+
+export interface ReadinessSnapshot extends HealthSnapshot {
   scheduler: {
     scheduledStrategies: number;
   };
@@ -110,7 +113,18 @@ export interface HealthSnapshot {
   };
   dependencies: {
     database: { status: 'ok' | 'error' };
-    bagsApi: { status: 'configured' | 'missing'; baseUrl: string };
+    bagsApi: {
+      status: 'configured' | 'missing';
+      baseUrl: string;
+      rateLimit?: {
+        remaining: number;
+        resetsAt: string | null;
+      };
+      circuitBreaker?: {
+        state: string;
+        consecutiveFailures: number;
+      };
+    };
     heliusRpc: { status: 'configured' | 'missing'; endpoint: string };
     agentAuth: {
       status: 'configured' | 'partial' | 'missing';
@@ -122,4 +136,14 @@ export interface HealthSnapshot {
       source: 'private-key' | 'bags-agent' | 'none';
     };
   };
+}
+
+export interface SessionState {
+  authenticated: boolean;
+}
+
+export interface LivenessSnapshot {
+  status: 'ok' | 'degraded';
+  version: string;
+  timestamp: string;
 }

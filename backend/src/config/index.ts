@@ -28,11 +28,14 @@ export interface Config {
   // API protection / browser access
   apiAuthToken: string;
   corsOrigins: string[];
+  sessionSecret: string;
+  sessionTtlHours: number;
 
   // Bags Agent auth
   bagsAgentUsername: string;
   bagsAgentJwt: string;
   bagsAgentWalletAddress: string;
+  allowAgentWalletExport: boolean;
 
   // Signing
   signerPrivateKey: string;
@@ -82,6 +85,7 @@ function getEnvBoolean(key: string, defaultValue = false): boolean {
 
 export function loadConfig(): Config {
   const heliusApiKey = getEnv('HELIUS_API_KEY', '');
+  const nodeEnv = (getEnv('NODE_ENV', 'development')) as Config['nodeEnv'];
   const solanaNetwork = getEnv('SOLANA_NETWORK', 'mainnet-beta') as 'mainnet-beta' | 'devnet';
   const corsOrigins = getEnv(
     'CORS_ORIGINS',
@@ -114,11 +118,14 @@ export function loadConfig(): Config {
     // API protection / browser access
     apiAuthToken: getEnv('API_AUTH_TOKEN', ''),
     corsOrigins,
+    sessionSecret: getEnv('SESSION_SECRET', getEnv('API_AUTH_TOKEN', '')),
+    sessionTtlHours: getEnvNumber('SESSION_TTL_HOURS', 12),
 
     // Bags Agent auth
     bagsAgentUsername: getEnv('BAGS_AGENT_USERNAME', ''),
     bagsAgentJwt: getEnv('BAGS_AGENT_JWT', ''),
     bagsAgentWalletAddress: getEnv('BAGS_AGENT_WALLET_ADDRESS', ''),
+    allowAgentWalletExport: getEnvBoolean('ALLOW_AGENT_WALLET_EXPORT', false),
 
     // Signing
     signerPrivateKey: getEnv('SIGNER_PRIVATE_KEY', ''),
@@ -130,7 +137,7 @@ export function loadConfig(): Config {
     maxClaimableSolPerRun: getEnvNumber('MAX_CLAIMABLE_SOL_PER_RUN', 0),
 
     // Environment
-    nodeEnv: (getEnv('NODE_ENV', 'development')) as Config['nodeEnv'],
+    nodeEnv,
     logLevel: (getEnv('LOG_LEVEL', 'info')) as Config['logLevel'],
   };
 }

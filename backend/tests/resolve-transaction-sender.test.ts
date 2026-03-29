@@ -14,9 +14,12 @@ function createConfig(overrides?: Partial<Config>): Config {
     feeThresholdSol: 7,
     apiAuthToken: 'api-token',
     corsOrigins: ['http://localhost:5173'],
+    sessionSecret: 'session-secret',
+    sessionTtlHours: 12,
     bagsAgentUsername: 'pinkbrain',
     bagsAgentJwt: '',
     bagsAgentWalletAddress: '',
+    allowAgentWalletExport: false,
     signerPrivateKey: '',
     dryRun: false,
     executionKillSwitch: false,
@@ -48,11 +51,28 @@ describe('resolveTransactionSender', () => {
     expect(result.resolvedWalletAddress).toBeNull();
   });
 
+  it('requires an explicit break-glass flag before exporting a Bags agent wallet', async () => {
+    await expect(resolveTransactionSender(
+      createConfig({
+        bagsAgentJwt: 'jwt-token',
+        allowAgentWalletExport: false,
+      }),
+      new Connection('https://api.mainnet-beta.solana.com'),
+      {
+        initializeAuth: vi.fn(),
+        completeAuth: vi.fn(),
+        listWallets: vi.fn().mockResolvedValue(['wallet-a']),
+        exportWallet: vi.fn(),
+      },
+    )).rejects.toThrow('ALLOW_AGENT_WALLET_EXPORT=true');
+  });
+
   it('can derive a signer from a single-wallet Bags agent', async () => {
     const keypair = Keypair.generate();
     const result = await resolveTransactionSender(
       createConfig({
         bagsAgentJwt: 'jwt-token',
+        allowAgentWalletExport: true,
       }),
       new Connection('https://api.mainnet-beta.solana.com'),
       {
@@ -73,6 +93,7 @@ describe('resolveTransactionSender', () => {
     await expect(resolveTransactionSender(
       createConfig({
         bagsAgentJwt: 'jwt-token',
+        allowAgentWalletExport: true,
       }),
       new Connection('https://api.mainnet-beta.solana.com'),
       {

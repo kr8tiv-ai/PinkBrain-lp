@@ -1,6 +1,6 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public status: number,
     public body: unknown,
@@ -11,12 +11,15 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (init?.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
+    credentials: 'include',
+    headers,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: res.statusText }));

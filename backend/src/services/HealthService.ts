@@ -1,7 +1,7 @@
 import type { Config } from '../config/index.js';
 import type { Database } from './Database.js';
 
-export interface HealthSnapshot {
+export interface ReadinessSnapshot {
   status: 'ok' | 'degraded';
   version: string;
   timestamp: string;
@@ -30,6 +30,12 @@ export interface HealthSnapshot {
   };
 }
 
+export interface LivenessSnapshot {
+  status: 'ok' | 'degraded';
+  version: string;
+  timestamp: string;
+}
+
 export class HealthService {
   constructor(
     private readonly db: Database,
@@ -40,10 +46,10 @@ export class HealthService {
     } = { signerSource: 'none', resolvedAgentWalletAddress: null },
   ) {}
 
-  getSnapshot(params: {
+  getReadinessSnapshot(params: {
     scheduledStrategies: number;
     version: string;
-  }): HealthSnapshot {
+  }): ReadinessSnapshot {
     const databaseStatus = this.getDatabaseStatus();
     const bagsApiStatus = this.config.bagsApiKey ? 'configured' : 'missing';
     const heliusStatus = this.config.heliusRpcUrl ? 'configured' : 'missing';
@@ -104,6 +110,15 @@ export class HealthService {
           source: signerSource,
         },
       },
+    };
+  }
+
+  getLivenessSnapshot(params: { version: string }): LivenessSnapshot {
+    const databaseStatus = this.getDatabaseStatus();
+    return {
+      status: databaseStatus === 'ok' ? 'ok' : 'degraded',
+      version: params.version,
+      timestamp: new Date().toISOString(),
     };
   }
 
