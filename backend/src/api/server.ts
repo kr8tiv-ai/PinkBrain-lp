@@ -11,6 +11,7 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerStrategyRoutes } from './routes/strategies.js';
 import { registerRunRoutes } from './routes/runs.js';
 import { registerStatsRoutes } from './routes/stats.js';
+import { registerValidationRoutes } from './routes/validation.js';
 import {
   StrategyValidationError,
   StrategyNotFoundError,
@@ -176,6 +177,7 @@ export async function createServer(ctx: ApiContext) {
 
   registerAuthRoutes(app, ctx);
   registerHealthRoutes(app, ctx);
+  registerValidationRoutes(app, ctx);
   registerStrategyRoutes(app, ctx);
   registerRunRoutes(app, ctx);
   registerStatsRoutes(app, ctx);

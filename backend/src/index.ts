@@ -27,6 +27,8 @@ import { HealthService } from './services/HealthService.js';
 import { createLoggerOptions } from './services/logger.js';
 import { resolveTransactionSender } from './services/resolveTransactionSender.js';
 import { createStrategyService } from './services/StrategyService.js';
+import { createStrategyInsightsService } from './services/StrategyInsightsService.js';
+import { createValidationService } from './services/ValidationService.js';
 
 async function main() {
   const config = getConfig();
@@ -82,6 +84,8 @@ async function main() {
     signerSource: signerResolution.source,
     resolvedAgentWalletAddress: signerResolution.resolvedWalletAddress,
   });
+  const validationService = createValidationService(connection);
+  const strategyInsightsService = createStrategyInsightsService(strategyService, runService);
 
   const engineConfig: EngineConfig = {
     strategyService,
@@ -112,6 +116,8 @@ async function main() {
     db,
     config,
     healthService,
+    validationService,
+    strategyInsightsService,
     bagsClient,
   });
 

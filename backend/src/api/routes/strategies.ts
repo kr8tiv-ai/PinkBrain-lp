@@ -67,6 +67,16 @@ function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
 export function registerStrategyRoutes(app: FastifyInstance, ctx: ApiContext): void {
   const { strategyService, engine, scheduler } = ctx;
 
+  app.get(
+    '/api/strategies/insights',
+    async () => ctx.strategyInsightsService.listStrategyInsights(),
+  );
+
+  app.get<{ Params: { id: string } }>(
+    '/api/strategies/:id/insights',
+    async (request) => ctx.strategyInsightsService.getStrategyInsight(request.params.id),
+  );
+
   // List all strategies (optional ?status=ACTIVE filter)
   app.get<{ Querystring: { status?: string } }>(
     '/api/strategies',

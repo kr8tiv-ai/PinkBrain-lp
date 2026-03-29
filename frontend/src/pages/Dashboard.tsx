@@ -11,15 +11,20 @@ import {
   Shield,
   Wallet,
 } from 'lucide-react';
-import { useStrategies, usePauseStrategy, useResumeStrategy } from '../api/strategies';
+import {
+  useStrategies,
+  usePauseStrategy,
+  useResumeStrategy,
+  useStrategyInsights,
+} from '../api/strategies';
 import { useStats } from '../api/stats';
 import { useHealth } from '../api/health';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 import { useBagsAuth } from '../hooks/useBagsAuth';
-import { truncateAddress, formatDate } from '../utils/format';
-import type { ReadinessSnapshot } from '../types/strategy';
+import { truncateAddress, formatDate, formatInteger, formatSol } from '../utils/format';
+import type { ReadinessSnapshot, StrategyInsight } from '../types/strategy';
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -62,14 +67,50 @@ function HealthIssueSummary({ health }: { health: ReadinessSnapshot }) {
   );
 }
 
+function StrategySnapshot({ insight }: { insight: StrategyInsight | undefined }) {
+  return (
+    <div className="mt-3 grid gap-2 text-[11px] sm:grid-cols-2 xl:grid-cols-4">
+      <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Lifetime Claimed</p>
+        <p className="mt-1 font-medium text-white">
+          {insight ? `${formatSol(insight.metrics.totalClaimedLamports)} SOL` : 'Loading...'}
+        </p>
+      </div>
+      <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Next Run</p>
+        <p className="mt-1 font-medium text-white">
+          {insight?.schedule.nextRunAt ? formatDate(insight.schedule.nextRunAt) : 'Paused or unscheduled'}
+        </p>
+      </div>
+      <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Run Health</p>
+        <p className="mt-1 font-medium text-white">
+          {insight?.lastRun ? insight.lastRun.state.replace(/_/g, ' ') : 'No runs yet'}
+        </p>
+        {insight?.lastRun?.errorCode && (
+          <p className="mt-1 text-orange-300">{insight.lastRun.errorCode}</p>
+        )}
+      </div>
+      <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Recipients</p>
+        <p className="mt-1 font-medium text-white">
+          {insight ? formatInteger(insight.metrics.totalRecipients) : 'Loading...'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard() {
   const { data: strategies, isLoading } = useStrategies();
+  const { data: insights } = useStrategyInsights();
   const { data: stats } = useStats();
   const { data: health } = useHealth();
   const agentAuth = health?.dependencies.agentAuth;
   const bagsAuth = useBagsAuth();
   const pauseMut = usePauseStrategy();
   const resumeMut = useResumeStrategy();
+  const insightByStrategyId = new Map((insights ?? []).map((insight) => [insight.strategyId, insight]));
 
   return (
     <div className="space-y-6">
@@ -204,46 +245,49 @@ export function Dashboard() {
       {strategies && strategies.length > 0 && (
         <div className="space-y-2">
           {strategies.map((s) => (
-            <Card key={s.strategyId} className="flex items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="font-mono text-sm">
-                    {truncateAddress(s.targetTokenA)} / {truncateAddress(s.targetTokenB)}
-                  </span>
-                  <Badge status={s.status} />
+            <Card key={s.strategyId}>
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="font-mono text-sm">
+                      {truncateAddress(s.targetTokenA)} / {truncateAddress(s.targetTokenB)}
+                    </span>
+                    <Badge status={s.status} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                    <span>{s.distribution.replace(/_/g, ' ')}</span>
+                    <span>Schedule: {s.schedule}</span>
+                    <span>Updated: {formatDate(s.updatedAt)}</span>
+                  </div>
+                  <StrategySnapshot insight={insightByStrategyId.get(s.strategyId)} />
                 </div>
-                <div className="flex items-center gap-3 text-xs text-gray-500">
-                  <span>{s.distribution.replace(/_/g, ' ')}</span>
-                  <span>Schedule: {s.schedule}</span>
-                  <span>Updated: {formatDate(s.updatedAt)}</span>
+                <div className="flex shrink-0 items-center gap-2">
+                  {s.status === 'ACTIVE' ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => pauseMut.mutate(s.strategyId)}
+                      disabled={pauseMut.isPending}
+                    >
+                      <Pause className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => resumeMut.mutate(s.strategyId)}
+                      disabled={resumeMut.isPending}
+                    >
+                      <Play className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  <Link to={`/strategy/${s.strategyId}`}>
+                    <Button variant="secondary" size="sm">
+                      <Eye className="h-3.5 w-3.5" />
+                      View
+                    </Button>
+                  </Link>
                 </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {s.status === 'ACTIVE' ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => pauseMut.mutate(s.strategyId)}
-                    disabled={pauseMut.isPending}
-                  >
-                    <Pause className="h-3.5 w-3.5" />
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => resumeMut.mutate(s.strategyId)}
-                    disabled={resumeMut.isPending}
-                  >
-                    <Play className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-                <Link to={`/strategy/${s.strategyId}`}>
-                  <Button variant="secondary" size="sm">
-                    <Eye className="h-3.5 w-3.5" />
-                    View
-                  </Button>
-                </Link>
               </div>
             </Card>
           ))}

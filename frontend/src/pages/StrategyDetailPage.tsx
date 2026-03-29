@@ -9,14 +9,20 @@ import {
   FlaskConical,
   Shield,
 } from 'lucide-react';
-import { useStrategy, usePauseStrategy, useResumeStrategy, useTriggerRun } from '../api/strategies';
+import {
+  useStrategy,
+  usePauseStrategy,
+  useResumeStrategy,
+  useTriggerRun,
+  useStrategyInsight,
+} from '../api/strategies';
 import { useRuns, useRunLogs } from '../api/runs';
 import { useHealth } from '../api/health';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 import { TxLink } from '../components/common/TxLink';
-import { truncateAddress, formatDate, accountUrl } from '../utils/format';
+import { truncateAddress, formatDate, accountUrl, formatInteger, formatSol } from '../utils/format';
 import { useState } from 'react';
 import type { AuditEntry } from '../types/strategy';
 
@@ -41,6 +47,7 @@ function AuditLogPanel({ runId }: { runId: string }) {
 export function StrategyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: strategy, isLoading: loadingStrategy } = useStrategy(id ?? '');
+  const { data: insight, isLoading: loadingInsight } = useStrategyInsight(id ?? '');
   const { data: runs, isLoading: loadingRuns } = useRuns(id ?? '');
   const { data: health } = useHealth();
   const pauseMut = usePauseStrategy();
@@ -168,6 +175,49 @@ export function StrategyDetailPage() {
         </Card>
       )}
 
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <h3 className="text-sm font-medium text-gray-400">Lifetime Claimed</h3>
+          <p className="mt-3 text-2xl font-semibold text-white">
+            {loadingInsight ? '...' : `${formatSol(insight?.metrics.totalClaimedLamports ?? 0)} SOL`}
+          </p>
+          <p className="mt-2 text-xs text-gray-500">
+            Completed runs: {insight?.metrics.completedRuns ?? 0} of {insight?.metrics.totalRuns ?? 0}
+          </p>
+        </Card>
+        <Card>
+          <h3 className="text-sm font-medium text-gray-400">Yield Distribution</h3>
+          <p className="mt-3 text-2xl font-semibold text-white">
+            {loadingInsight ? '...' : formatInteger(insight?.metrics.totalDistributedAmount ?? 0)}
+          </p>
+          <p className="mt-2 text-xs text-gray-500">
+            Recipients served: {formatInteger(insight?.metrics.totalRecipients ?? 0)}
+          </p>
+        </Card>
+        <Card>
+          <h3 className="text-sm font-medium text-gray-400">Permanent Locked</h3>
+          <p className="mt-3 text-2xl font-semibold text-white">
+            {loadingInsight ? '...' : formatInteger(insight?.metrics.totalLockedLiquidity ?? 0)}
+          </p>
+          <p className="mt-2 text-xs text-gray-500">
+            Last success: {insight?.metrics.lastSuccessfulRunAt ? formatDate(insight.metrics.lastSuccessfulRunAt) : 'None yet'}
+          </p>
+        </Card>
+        <Card>
+          <h3 className="text-sm font-medium text-gray-400">Next Run</h3>
+          <p className="mt-3 text-lg font-semibold text-white">
+            {loadingInsight ? '...' : insight?.schedule.nextRunAt ? formatDate(insight.schedule.nextRunAt) : 'Paused or unscheduled'}
+          </p>
+          <p className="mt-2 text-xs text-gray-500">
+            {insight?.lastRun?.errorCode
+              ? `Last error: ${insight.lastRun.errorCode}`
+              : insight?.lastRun
+                ? `Last state: ${insight.lastRun.state.replace(/_/g, ' ')}`
+                : 'No run history yet'}
+          </p>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
           <h3 className="mb-3 text-sm font-medium text-gray-400">Configuration</h3>
@@ -184,6 +234,12 @@ export function StrategyDetailPage() {
               <dt className="text-gray-500">Schedule</dt>
               <dd className="font-mono">{strategy.schedule}</dd>
             </div>
+            {insight?.schedule.nextRunAt && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Next Run</dt>
+                <dd>{formatDate(insight.schedule.nextRunAt)}</dd>
+              </div>
+            )}
             <div className="flex justify-between">
               <dt className="text-gray-500">Min Threshold</dt>
               <dd>{strategy.minCompoundThreshold} SOL</dd>

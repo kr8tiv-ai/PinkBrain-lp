@@ -84,6 +84,123 @@ function createApiFetch(session: SessionState) {
       return createJsonResponse([]);
     }
 
+    if (url.endsWith('/api/strategies/insights') && method === 'GET') {
+      return createJsonResponse([]);
+    }
+
+    throw new Error(`Unhandled fetch: ${method} ${url}`);
+  });
+}
+
+function createApiFetchWithStrategyInsights(session: SessionState) {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    const method = init?.method ?? 'GET';
+
+    if (url.endsWith('/api/auth/session') && method === 'GET') {
+      return createJsonResponse({ authenticated: true, csrfToken: 'csrf-token' });
+    }
+
+    if (url.endsWith('/api/stats') && method === 'GET') {
+      return createJsonResponse({
+        strategies: { total: 1, active: 1 },
+        runs: { total: 2, completed: 1, failed: 1, successRate: 50 },
+        scheduledJobs: 1,
+        runtime: {
+          dryRun: false,
+          killSwitchEnabled: false,
+          apiAuthProtected: true,
+        },
+      });
+    }
+
+    if (url.endsWith('/api/readiness') && method === 'GET') {
+      return createJsonResponse({
+        status: 'ok',
+        version: 'test',
+        timestamp: '2026-03-28T00:00:00.000Z',
+        scheduler: { scheduledStrategies: 1 },
+        runtime: {
+          dryRun: false,
+          killSwitchEnabled: false,
+          apiAuthProtected: true,
+          executionMode: 'live',
+        },
+        dependencies: {
+          database: { status: 'ok' },
+          bagsApi: { status: 'configured', baseUrl: 'https://api.test.local' },
+          heliusRpc: { status: 'configured', endpoint: 'https://helius.test.local' },
+          agentAuth: { status: 'missing', username: null, walletAddress: null },
+          signer: { status: 'configured', source: 'remote-signer' },
+        },
+      });
+    }
+
+    if (url.endsWith('/api/strategies') && method === 'GET') {
+      return createJsonResponse([
+        {
+          strategyId: 'strategy-1',
+          ownerWallet: '7xKpXq3QSCdKKZ8GbLzoGKN1GL1VTqG7qR7KtB7jL1bN',
+          source: 'CLAIMABLE_POSITIONS',
+          targetTokenA: 'So11111111111111111111111111111111111111112',
+          targetTokenB: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+          distributionToken: 'So11111111111111111111111111111111111111112',
+          swapConfig: { slippageBps: 50, maxPriceImpactBps: 100 },
+          meteoraConfig: { poolAddress: null, baseFee: 25, priceRange: null, lockMode: 'PERMANENT' },
+          distribution: 'OWNER_ONLY',
+          exclusionList: [],
+          schedule: '0 */6 * * *',
+          minCompoundThreshold: 7,
+          status: 'ACTIVE',
+          lastRunId: null,
+          createdAt: '2026-03-28T00:00:00.000Z',
+          updatedAt: '2026-03-28T00:00:00.000Z',
+        },
+      ]);
+    }
+
+    if (url.endsWith('/api/strategies/insights') && method === 'GET') {
+      return createJsonResponse([
+        {
+          strategyId: 'strategy-1',
+          schedule: {
+            expression: '0 */6 * * *',
+            nextRunAt: '2026-03-29T06:00:00.000Z',
+          },
+          lastRun: {
+            runId: 'run-2',
+            state: 'FAILED',
+            startedAt: '2026-03-29T00:00:00.000Z',
+            finishedAt: '2026-03-29T00:05:00.000Z',
+            errorCode: 'RPC_TIMEOUT',
+          },
+          metrics: {
+            totalRuns: 2,
+            completedRuns: 1,
+            failedRuns: 1,
+            totalClaimedLamports: '1500000000',
+            totalDistributedAmount: '300',
+            totalLockedLiquidity: '200',
+            totalRecipients: 1,
+            lastSuccessfulRunAt: '2026-03-28T00:05:00.000Z',
+          },
+        },
+      ]);
+    }
+
+    if (url.endsWith('/api/liveness') && method === 'GET') {
+      return createJsonResponse({
+        status: 'ok',
+        version: 'test',
+        timestamp: '2026-03-28T00:00:00.000Z',
+      });
+    }
+
+    if (url.endsWith('/api/auth/logout') && method === 'POST') {
+      session.authenticated = false;
+      return createJsonResponse({ authenticated: false });
+    }
+
     throw new Error(`Unhandled fetch: ${method} ${url}`);
   });
 }
@@ -142,5 +259,17 @@ describe('App auth flow', () => {
     expect(await screen.findByText(/secure operator session started/i)).toBeTruthy();
     expect(await screen.findByText(/runtime readiness/i)).toBeTruthy();
     expect(window.location.search).toBe('');
+  });
+
+  test('renders strategy insights on the dashboard for authenticated operators', async () => {
+    const session = { authenticated: true };
+    vi.stubGlobal('fetch', createApiFetchWithStrategyInsights(session));
+
+    await renderApp();
+
+    expect(await screen.findByText(/lifetime claimed/i)).toBeTruthy();
+    expect(await screen.findByText(/1\.5000 sol/i)).toBeTruthy();
+    expect(await screen.findByText(/rpc_timeout/i)).toBeTruthy();
+    expect(await screen.findByText(/next run/i)).toBeTruthy();
   });
 });

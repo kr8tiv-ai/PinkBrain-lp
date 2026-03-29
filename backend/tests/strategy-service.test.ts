@@ -39,17 +39,35 @@ function dbPath(name = 'test.db'): string {
   return join(tempDir, name);
 }
 
-/** Create a mock Solana Connection. Each mint maps to an AccountInfo or null. */
+function createParsedMintAccount() {
+  return {
+    owner: { toBase58: () => 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+    data: {
+      program: 'spl-token',
+      parsed: {
+        type: 'mint',
+        info: {
+          decimals: 9,
+          supply: '1000000',
+          isInitialized: true,
+        },
+      },
+    },
+  };
+}
+
+/** Create a mock Solana Connection. Each mint maps to parsed account info or null. */
 function createMockConnection(
   accounts: Record<string, object | null> = {},
 ): Connection {
   return {
-    getAccountInfo: vi.fn().mockImplementation(
-      async (pubkey: { toString: () => string }) => {
-        const key = pubkey.toString();
-        if (key in accounts) return accounts[key];
-        // Default: account exists (for any unmocked mint)
-        return {};
+    getParsedAccountInfo: vi.fn().mockImplementation(
+      async (pubkey: { toBase58: () => string }) => {
+        const key = pubkey.toBase58();
+        if (key in accounts) {
+          return { value: accounts[key] };
+        }
+        return { value: createParsedMintAccount() };
       },
     ),
   } as unknown as Connection;
@@ -80,9 +98,6 @@ function validInput(overrides: Partial<CreateInput> = {}): CreateInput {
 
 /** Fields a caller provides when creating a strategy. */
 type CreateInput = Omit<Strategy, 'strategyId' | 'createdAt' | 'updatedAt' | 'lastRunId' | 'status'>;
-
-/** Fields allowed in an update call. */
-type UpdateInput = Partial<Omit<Strategy, 'strategyId' | 'createdAt' | 'updatedAt' | 'lastRunId'>>;
 
 beforeEach(() => {
   database = new Database({ dbPath: dbPath() });
@@ -124,13 +139,13 @@ describe('StrategyService', () => {
       expect(strategy.exclusionList).toEqual(input.exclusionList);
     });
 
-    it('calls getAccountInfo for both target tokens', async () => {
+    it('calls getParsedAccountInfo for token-mint checks', async () => {
       const mockConn = createMockConnection();
       service = createStrategyService(database, mockConn);
 
       await service.createStrategy(validInput());
 
-      expect(mockConn.getAccountInfo).toHaveBeenCalledTimes(2);
+      expect(mockConn.getParsedAccountInfo).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -203,7 +218,7 @@ describe('StrategyService', () => {
 
     it('throws StrategyValidationError with RPC_ERROR rule when RPC call fails', async () => {
       const mockConn = {
-        getAccountInfo: vi.fn().mockRejectedValue(new Error('Network timeout')),
+        getParsedAccountInfo: vi.fn().mockRejectedValue(new Error('Network timeout')),
       } as unknown as Connection;
       service = createStrategyService(database, mockConn);
 
@@ -458,6 +473,19 @@ describe('StrategyService', () => {
         expect(ve.field).toBe('schedule');
         expect(ve.rule).toBe('SCHEDULE_TOO_FREQUENT');
       }
+    });
+
+    it('re-validates owner wallet when the owner changes', async () => {
+      const mockConn = createMockConnection();
+      service = createStrategyService(database, mockConn);
+
+      const created = await service.createStrategy(validInput());
+
+      await expect(
+        service.updateStrategy(created.strategyId, {
+          ownerWallet: 'not-a-wallet',
+        }),
+      ).rejects.toThrow(StrategyValidationError);
     });
 
     it('throws StrategyNotFoundError for non-existent ID', async () => {

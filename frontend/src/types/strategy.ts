@@ -148,3 +148,51 @@ export interface LivenessSnapshot {
   version: string;
   timestamp: string;
 }
+
+export interface StrategyInsight {
+  strategyId: string;
+  schedule: {
+    expression: string;
+    nextRunAt: string | null;
+  };
+  lastRun: {
+    runId: string;
+    state: RunState;
+    startedAt: string;
+    finishedAt: string | null;
+    errorCode: string | null;
+  } | null;
+  metrics: {
+    totalRuns: number;
+    completedRuns: number;
+    failedRuns: number;
+    totalClaimedLamports: string;
+    totalDistributedAmount: string;
+    totalLockedLiquidity: string;
+    totalRecipients: number;
+    lastSuccessfulRunAt: string | null;
+  };
+}
+
+export interface PublicKeyValidationResult {
+  value: string;
+  valid: boolean;
+  normalized: string | null;
+  rule: string | null;
+  message: string;
+}
+
+export interface TokenMintValidationResult extends PublicKeyValidationResult {
+  ownerProgram: string | null;
+  decimals: number | null;
+  supply: string | null;
+  isInitialized: boolean | null;
+}
+
+export interface ScheduleValidationResult {
+  value: string;
+  valid: boolean;
+  rule: string | null;
+  message: string;
+  nextRunAt: string | null;
+}

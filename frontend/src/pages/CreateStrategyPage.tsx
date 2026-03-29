@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, AlertTriangle, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCreateStrategy } from '../api/strategies';
+import {
+  usePublicKeyValidation,
+  useScheduleValidation,
+  useTokenMintValidation,
+} from '../api/validation';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 import { useBagsAuth } from '../hooks/useBagsAuth';
+import { formatDate } from '../utils/format';
 import type { DistributionMode, FeeSourceType } from '../types/strategy';
 
 interface FormState {
@@ -44,6 +50,40 @@ const INITIAL: FormState = {
 
 const STEPS = ['Tokens', 'Pool Config', 'Distribution', 'Schedule', 'Review'];
 
+function ValidationMessage({
+  value,
+  isFetching,
+  valid,
+  message,
+  pendingLabel,
+  successLabel,
+}: {
+  value: string;
+  isFetching: boolean;
+  valid: boolean | undefined;
+  message: string | undefined;
+  pendingLabel: string;
+  successLabel: string;
+}) {
+  if (value.trim().length === 0) {
+    return null;
+  }
+
+  if (isFetching) {
+    return <p className="mt-2 text-xs text-gray-500">{pendingLabel}</p>;
+  }
+
+  if (valid) {
+    return <p className="mt-2 text-xs text-emerald-400">{successLabel}</p>;
+  }
+
+  if (message) {
+    return <p className="mt-2 text-xs text-red-400">{message}</p>;
+  }
+
+  return null;
+}
+
 function Input({
   label,
   hint,
@@ -67,6 +107,34 @@ export function CreateStrategyPage() {
   const navigate = useNavigate();
   const createMut = useCreateStrategy();
   const bagsAuth = useBagsAuth();
+  const ownerWalletValue = form.ownerWallet.trim();
+  const tokenAValue = form.targetTokenA.trim();
+  const tokenBValue = form.targetTokenB.trim();
+  const scheduleValue = form.schedule.trim();
+  const distributionTokenValue = (form.distributionToken || form.targetTokenA).trim();
+  const deferredOwnerWallet = useDeferredValue(ownerWalletValue);
+  const deferredTokenA = useDeferredValue(tokenAValue);
+  const deferredTokenB = useDeferredValue(tokenBValue);
+  const deferredSchedule = useDeferredValue(scheduleValue);
+  const deferredDistributionToken = useDeferredValue(distributionTokenValue);
+  const ownerWalletValidation = usePublicKeyValidation(deferredOwnerWallet);
+  const tokenAValidation = useTokenMintValidation(deferredTokenA);
+  const tokenBValidation = useTokenMintValidation(deferredTokenB);
+  const distributionTokenValidation = useTokenMintValidation(
+    deferredDistributionToken,
+    form.distribution === 'TOP_100_HOLDERS',
+  );
+  const scheduleValidation = useScheduleValidation(deferredSchedule);
+  const tokensDiffer = tokenAValue.length > 0 && tokenBValue.length > 0 && tokenAValue !== tokenBValue;
+  const tokenStepReady = Boolean(
+    ownerWalletValidation.data?.valid
+      && tokenAValidation.data?.valid
+      && tokenBValidation.data?.valid
+      && tokensDiffer,
+  );
+  const distributionStepReady = form.distribution === 'OWNER_ONLY'
+    || Boolean(distributionTokenValidation.data?.valid);
+  const scheduleStepReady = Boolean(scheduleValidation.data?.valid) && form.minCompoundThreshold > 0;
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -80,13 +148,13 @@ export function CreateStrategyPage() {
   const canNext = () => {
     switch (step) {
       case 0:
-        return form.ownerWallet && form.targetTokenA && form.targetTokenB && form.targetTokenA !== form.targetTokenB;
+        return tokenStepReady;
       case 1:
         return form.baseFee > 0;
       case 2:
-        return true;
+        return distributionStepReady;
       case 3:
-        return form.schedule.trim().split(/\s+/).length === 5;
+        return scheduleStepReady;
       case 4:
         return form.lockConfirmed;
       default:
@@ -182,19 +250,47 @@ export function CreateStrategyPage() {
               onChange={(e) => set('ownerWallet', e.target.value)}
               disabled={Boolean(bagsAuth.walletAddress)}
             />
+            <ValidationMessage
+              value={ownerWalletValue}
+              isFetching={ownerWalletValidation.isFetching}
+              valid={ownerWalletValidation.data?.valid}
+              message={ownerWalletValidation.data?.message}
+              pendingLabel="Validating wallet..."
+              successLabel="Wallet verified"
+            />
             <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="Token A Mint"
-                placeholder="Token A address"
-                value={form.targetTokenA}
-                onChange={(e) => set('targetTokenA', e.target.value)}
-              />
-              <Input
-                label="Token B Mint"
-                placeholder="Token B address"
-                value={form.targetTokenB}
-                onChange={(e) => set('targetTokenB', e.target.value)}
-              />
+              <div>
+                <Input
+                  label="Token A Mint"
+                  placeholder="Token A address"
+                  value={form.targetTokenA}
+                  onChange={(e) => set('targetTokenA', e.target.value)}
+                />
+                <ValidationMessage
+                  value={tokenAValue}
+                  isFetching={tokenAValidation.isFetching}
+                  valid={tokenAValidation.data?.valid}
+                  message={tokenAValidation.data?.message}
+                  pendingLabel="Checking mint..."
+                  successLabel={`Mint verified${tokenAValidation.data?.decimals != null ? ` (${tokenAValidation.data.decimals} decimals)` : ''}`}
+                />
+              </div>
+              <div>
+                <Input
+                  label="Token B Mint"
+                  placeholder="Token B address"
+                  value={form.targetTokenB}
+                  onChange={(e) => set('targetTokenB', e.target.value)}
+                />
+                <ValidationMessage
+                  value={tokenBValue}
+                  isFetching={tokenBValidation.isFetching}
+                  valid={tokenBValidation.data?.valid}
+                  message={tokenBValidation.data?.message}
+                  pendingLabel="Checking mint..."
+                  successLabel={`Mint verified${tokenBValidation.data?.decimals != null ? ` (${tokenBValidation.data.decimals} decimals)` : ''}`}
+                />
+              </div>
             </div>
             {form.targetTokenA && form.targetTokenA === form.targetTokenB && (
               <p className="text-xs text-red-400">Token A and Token B must be different</p>
@@ -276,13 +372,23 @@ export function CreateStrategyPage() {
             </div>
             {form.distribution === 'TOP_100_HOLDERS' && (
               <>
-                <Input
-                  label="Distribution Token"
-                  hint="Token mint for holder snapshot (defaults to Token A)"
-                  placeholder={form.targetTokenA || 'Token A address'}
-                  value={form.distributionToken}
-                  onChange={(e) => set('distributionToken', e.target.value)}
-                />
+                <div>
+                  <Input
+                    label="Distribution Token"
+                    hint="Token mint for holder snapshot (defaults to Token A)"
+                    placeholder={form.targetTokenA || 'Token A address'}
+                    value={form.distributionToken}
+                    onChange={(e) => set('distributionToken', e.target.value)}
+                  />
+                  <ValidationMessage
+                    value={distributionTokenValue}
+                    isFetching={distributionTokenValidation.isFetching}
+                    valid={distributionTokenValidation.data?.valid}
+                    message={distributionTokenValidation.data?.message}
+                    pendingLabel="Checking distribution token..."
+                    successLabel="Distribution token verified"
+                  />
+                </div>
                 <Input
                   label="Exclusion List"
                   hint="Comma-separated addresses to exclude from distribution"
@@ -305,6 +411,19 @@ export function CreateStrategyPage() {
               value={form.schedule}
               onChange={(e) => set('schedule', e.target.value)}
             />
+            <ValidationMessage
+              value={scheduleValue}
+              isFetching={scheduleValidation.isFetching}
+              valid={scheduleValidation.data?.valid}
+              message={scheduleValidation.data?.message}
+              pendingLabel="Validating schedule..."
+              successLabel="Schedule verified"
+            />
+            {scheduleValidation.data?.valid && scheduleValidation.data.nextRunAt && (
+              <p className="text-xs text-emerald-300">
+                Next run preview: {formatDate(scheduleValidation.data.nextRunAt)}
+              </p>
+            )}
             <Input
               label="Min Compound Threshold (SOL)"
               hint="Minimum accrued fees before triggering a compound. Default: 7 SOL."
@@ -327,6 +446,9 @@ export function CreateStrategyPage() {
               <div className="flex justify-between"><dt className="text-gray-500">Source</dt><dd>{form.source.replace(/_/g, ' ')}</dd></div>
               <div className="flex justify-between"><dt className="text-gray-500">Distribution</dt><dd>{form.distribution.replace(/_/g, ' ')}</dd></div>
               <div className="flex justify-between"><dt className="text-gray-500">Schedule</dt><dd className="font-mono">{form.schedule}</dd></div>
+              {scheduleValidation.data?.nextRunAt && (
+                <div className="flex justify-between"><dt className="text-gray-500">Next Run</dt><dd>{formatDate(scheduleValidation.data.nextRunAt)}</dd></div>
+              )}
               <div className="flex justify-between"><dt className="text-gray-500">Slippage</dt><dd>{form.slippageBps} bps</dd></div>
               <div className="flex justify-between"><dt className="text-gray-500">Threshold</dt><dd>{form.minCompoundThreshold} SOL</dd></div>
             </dl>

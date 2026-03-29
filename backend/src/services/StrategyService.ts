@@ -12,9 +12,9 @@
  */
 
 import type { Connection } from '@solana/web3.js';
-import { PublicKey } from '@solana/web3.js';
 import type { Database } from './Database.js';
 import { StrategyValidationError, StrategyNotFoundError } from './errors.js';
+import { ValidationService } from './ValidationService.js';
 import type {
   Strategy,
   StrategyStatus,
@@ -97,47 +97,13 @@ function rowToStrategy(row: Record<string, unknown>): Strategy {
  *
  * Supports: * (60), star/N (ceil(60/N)), N (1), N,M,... (count), N-M (M-N+1)
  */
-function countMinuteExecutions(field: string): number {
-  const trimmed = field.trim();
-
-  // Wildcard: every minute
-  if (trimmed === '*') return 60;
-
-  // Step: */N
-  const stepMatch = trimmed.match(/^\*\/(\d+)$/);
-  if (stepMatch) {
-    const step = parseInt(stepMatch[1], 10);
-    return step >= 60 ? 1 : Math.ceil(60 / step);
-  }
-
-  // Comma-separated list
-  if (trimmed.includes(',')) {
-    return trimmed.split(',').filter((s) => s.trim().length > 0).length;
-  }
-
-  // Range: N-M
-  const rangeMatch = trimmed.match(/^(\d+)-(\d+)$/);
-  if (rangeMatch) {
-    const start = parseInt(rangeMatch[1], 10);
-    const end = parseInt(rangeMatch[2], 10);
-    return end - start + 1;
-  }
-
-  // Single specific minute
-  return 1;
-}
-
-// ---------------------------------------------------------------------------
-// StrategyService
-// ---------------------------------------------------------------------------
-
 export class StrategyService {
   private readonly db: Database;
-  private readonly connection: Connection;
+  private readonly validation: ValidationService;
 
   constructor(db: Database, connection: Connection) {
     this.db = db;
-    this.connection = connection;
+    this.validation = new ValidationService(connection);
   }
 
   // ---------------------------------------------------------------
@@ -148,11 +114,7 @@ export class StrategyService {
    * Verify a string is a valid Solana public key.
    */
   private validatePublicKey(address: string, fieldName: string): void {
-    try {
-      new PublicKey(address);
-    } catch {
-      throw new StrategyValidationError(fieldName, 'INVALID_PUBLIC_KEY', address);
-    }
+    this.validation.assertPublicKey(address, fieldName);
   }
 
   /**
@@ -163,25 +125,7 @@ export class StrategyService {
     mintAddress: string,
     fieldName: string,
   ): Promise<void> {
-    try {
-      const pubkey = new PublicKey(mintAddress);
-      const accountInfo = await this.connection.getAccountInfo(pubkey);
-
-      if (accountInfo === null || accountInfo === undefined) {
-        throw new StrategyValidationError(
-          fieldName,
-          'TOKEN_MINT_NOT_FOUND',
-          mintAddress,
-        );
-      }
-    } catch (err) {
-      if (err instanceof StrategyValidationError) throw err;
-      throw new StrategyValidationError(
-        fieldName,
-        'RPC_ERROR',
-        mintAddress,
-      );
-    }
+    await this.validation.assertTokenMint(mintAddress, fieldName);
   }
 
   /**
@@ -189,25 +133,7 @@ export class StrategyService {
    * Parses the minute field and rejects any pattern that produces >1 execution per hour.
    */
   private validateSchedule(schedule: string): void {
-    const parts = schedule.trim().split(/\s+/);
-
-    if (parts.length !== 5) {
-      throw new StrategyValidationError(
-        'schedule',
-        'INVALID_CRON_FORMAT',
-        schedule,
-      );
-    }
-
-    const minuteCount = countMinuteExecutions(parts[0]);
-
-    if (minuteCount > 1) {
-      throw new StrategyValidationError(
-        'schedule',
-        'SCHEDULE_TOO_FREQUENT',
-        schedule,
-      );
-    }
+    this.validation.assertSchedule(schedule);
   }
 
   /**
@@ -239,14 +165,17 @@ export class StrategyService {
   async createStrategy(input: StrategyCreateInput): Promise<Strategy> {
     // Validate wallet addresses are valid public keys
     this.validatePublicKey(input.ownerWallet, 'ownerWallet');
-    this.validatePublicKey(input.distributionToken, 'distributionToken');
     for (const addr of input.exclusionList) {
       this.validatePublicKey(addr, 'exclusionList');
+    }
+    if (input.meteoraConfig.poolAddress) {
+      this.validatePublicKey(input.meteoraConfig.poolAddress, 'meteoraConfig.poolAddress');
     }
 
     // Validate tokens exist on-chain
     await this.validateTokenMint(input.targetTokenA, 'targetTokenA');
     await this.validateTokenMint(input.targetTokenB, 'targetTokenB');
+    await this.validateTokenMint(input.distributionToken, 'distributionToken');
 
     // Validate tokens differ
     this.validateTokensDiffer(input.targetTokenA, input.targetTokenB);
@@ -345,6 +274,24 @@ export class StrategyService {
       await this.validateTokenMint(newTokenA, 'targetTokenA');
       await this.validateTokenMint(newTokenB, 'targetTokenB');
       this.validateTokensDiffer(newTokenA, newTokenB);
+    }
+
+    if ('distributionToken' in updates && updates.distributionToken !== undefined) {
+      await this.validateTokenMint(updates.distributionToken, 'distributionToken');
+    }
+
+    if ('ownerWallet' in updates && updates.ownerWallet !== undefined) {
+      this.validatePublicKey(updates.ownerWallet, 'ownerWallet');
+    }
+
+    if ('exclusionList' in updates && updates.exclusionList !== undefined) {
+      for (const address of updates.exclusionList) {
+        this.validatePublicKey(address, 'exclusionList');
+      }
+    }
+
+    if ('meteoraConfig' in updates && updates.meteoraConfig?.poolAddress) {
+      this.validatePublicKey(updates.meteoraConfig.poolAddress, 'meteoraConfig.poolAddress');
     }
 
     // Re-validate schedule if it changed

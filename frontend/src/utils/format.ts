@@ -4,9 +4,49 @@ export function truncateAddress(address: string, chars = 4): string {
   return `${address.slice(0, chars)}...${address.slice(-chars)}`;
 }
 
-/** Format a SOL amount with 4 decimal places */
-export function formatSol(lamports: number): string {
-  return (lamports / 1e9).toFixed(4);
+function parseInteger(value: number | string | bigint): bigint {
+  if (typeof value === 'bigint') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return 0n;
+    }
+
+    return BigInt(Math.trunc(value));
+  }
+
+  if (value.trim().length === 0) {
+    return 0n;
+  }
+
+  try {
+    return BigInt(value);
+  } catch {
+    return 0n;
+  }
+}
+
+/** Format a SOL amount with 4 decimal places using integer lamports. */
+export function formatSol(lamports: number | string | bigint, fractionDigits = 4): string {
+  const absolute = parseInteger(lamports);
+  const isNegative = absolute < 0n;
+  const normalized = isNegative ? -absolute : absolute;
+  const whole = normalized / 1_000_000_000n;
+  const fractional = normalized % 1_000_000_000n;
+  const paddedFraction = fractional.toString().padStart(9, '0').slice(0, fractionDigits);
+
+  return `${isNegative ? '-' : ''}${whole.toString()}.${paddedFraction}`;
+}
+
+/** Format an integer amount with grouping separators. */
+export function formatInteger(value: number | string | bigint): string {
+  const normalized = parseInteger(value).toString();
+  const isNegative = normalized.startsWith('-');
+  const digits = isNegative ? normalized.slice(1) : normalized;
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return isNegative ? `-${grouped}` : grouped;
 }
 
 /** Format a date string to local short format */

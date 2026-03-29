@@ -8,6 +8,8 @@ import { createServer } from '../src/api/server.js';
 import { createBootstrapToken } from '../src/services/bootstrapAuth.js';
 import { Database } from '../src/services/Database.js';
 import { HealthService } from '../src/services/HealthService.js';
+import { StrategyInsightsService } from '../src/services/StrategyInsightsService.js';
+import { ValidationService } from '../src/services/ValidationService.js';
 
 let tempDir: string;
 let database: Database;
@@ -81,6 +83,13 @@ async function createTestApp(configOverrides?: Partial<Config>) {
       signerSource: 'private-key',
       resolvedAgentWalletAddress: null,
     }),
+    validationService: new ValidationService({
+      getParsedAccountInfo: vi.fn(async () => ({ value: null })),
+    } as any),
+    strategyInsightsService: new StrategyInsightsService(
+      { listStrategies: vi.fn(async () => []), getStrategy: vi.fn() } as any,
+      { getRunsByStrategyId: vi.fn(() => []) } as any,
+    ),
     bagsClient: {
       getRateLimitStatus: vi.fn(() => ({ remaining: 999, resetAt: 0 })),
       getCircuitBreakerState: vi.fn(() => ({ state: 'closed', failures: 0 })),

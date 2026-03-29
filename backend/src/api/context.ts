@@ -11,6 +11,8 @@ import type { Database } from '../services/Database.js';
 import type { Config } from '../config/index.js';
 import type { HealthService } from '../services/HealthService.js';
 import type { BagsClient } from '../clients/BagsClient.js';
+import type { ValidationService } from '../services/ValidationService.js';
+import type { StrategyInsightsService } from '../services/StrategyInsightsService.js';
 
 export interface ApiContext {
   strategyService: StrategyService;
@@ -21,5 +23,7 @@ export interface ApiContext {
   db: Database;
   config: Config;
   healthService: HealthService;
+  validationService: ValidationService;
+  strategyInsightsService: StrategyInsightsService;
   bagsClient?: BagsClient;
 }
