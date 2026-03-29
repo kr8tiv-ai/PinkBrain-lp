@@ -1,7 +1,7 @@
 import type { Config } from '../config/index.js';
 import type { Database } from './Database.js';
 
-export interface HealthSnapshot {
+export interface ReadinessSnapshot {
   status: 'ok' | 'degraded';
   version: string;
   timestamp: string;
@@ -25,9 +25,15 @@ export interface HealthSnapshot {
     };
     signer: {
       status: 'configured' | 'not-required' | 'missing';
-      source: 'private-key' | 'bags-agent' | 'none';
+      source: 'remote-signer' | 'private-key' | 'bags-agent' | 'none';
     };
   };
+}
+
+export interface LivenessSnapshot {
+  status: 'ok' | 'degraded';
+  version: string;
+  timestamp: string;
 }
 
 export class HealthService {
@@ -35,15 +41,15 @@ export class HealthService {
     private readonly db: Database,
     private readonly config: Config,
     private readonly runtime: {
-      signerSource: 'private-key' | 'bags-agent' | 'none';
+      signerSource: 'remote-signer' | 'private-key' | 'bags-agent' | 'none';
       resolvedAgentWalletAddress?: string | null;
     } = { signerSource: 'none', resolvedAgentWalletAddress: null },
   ) {}
 
-  getSnapshot(params: {
+  getReadinessSnapshot(params: {
     scheduledStrategies: number;
     version: string;
-  }): HealthSnapshot {
+  }): ReadinessSnapshot {
     const databaseStatus = this.getDatabaseStatus();
     const bagsApiStatus = this.config.bagsApiKey ? 'configured' : 'missing';
     const heliusStatus = this.config.heliusRpcUrl ? 'configured' : 'missing';
@@ -51,6 +57,8 @@ export class HealthService {
     const signerSource =
       this.runtime.signerSource !== 'none'
         ? this.runtime.signerSource
+        : this.config.remoteSignerUrl
+          ? 'remote-signer'
         : this.config.signerPrivateKey
           ? 'private-key'
           : 'none';
@@ -104,6 +112,15 @@ export class HealthService {
           source: signerSource,
         },
       },
+    };
+  }
+
+  getLivenessSnapshot(params: { version: string }): LivenessSnapshot {
+    const databaseStatus = this.getDatabaseStatus();
+    return {
+      status: databaseStatus === 'ok' ? 'ok' : 'degraded',
+      version: params.version,
+      timestamp: new Date().toISOString(),
     };
   }
 

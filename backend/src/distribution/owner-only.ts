@@ -36,22 +36,22 @@ export async function buildOwnerOnlyDistribution(
   const sourceAta = getAssociatedTokenAddressSync(mint, owner, false, TOKEN_PROGRAM_ID);
 
   // Check balance — if ATA doesn't exist or has zero balance, return early
-  let amount: number;
+  let amount: bigint;
   try {
     const balance = await connection.getTokenAccountBalance(sourceAta);
-    amount = Number(balance.value.amount);
+    amount = BigInt(balance.value.amount);
   } catch {
     // ATA likely doesn't exist
     return {
-      totalYieldClaimed: 0,
+      totalYieldClaimed: '0',
       recipientCount: 0,
       txSignatures: [],
     };
   }
 
-  if (amount === 0) {
+  if (amount === 0n) {
     return {
-      totalYieldClaimed: 0,
+      totalYieldClaimed: '0',
       recipientCount: 0,
       txSignatures: [],
     };
@@ -80,14 +80,14 @@ export async function buildOwnerOnlyDistribution(
       sourceAta,
       destAta,
       owner,
-      BigInt(amount),
+      amount,
       [],
       TOKEN_PROGRAM_ID,
     ),
   );
 
   // Get recent blockhash
-  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
   transaction.recentBlockhash = blockhash;
   transaction.feePayer = owner;
 
@@ -95,10 +95,15 @@ export async function buildOwnerOnlyDistribution(
   const serialized = transaction.serialize({ requireAllSignatures: false });
   const base64Tx = serialized.toString('base64');
 
-  const { signature } = await ctx.sender.signAndSendTransaction(base64Tx);
+  const { signature } = await ctx.sender.signAndSendTransaction(base64Tx, {
+    confirmationContext: {
+      blockhash,
+      lastValidBlockHeight,
+    },
+  });
 
   return {
-    totalYieldClaimed: amount,
+    totalYieldClaimed: amount.toString(),
     recipientCount: 1,
     txSignatures: [signature],
   };

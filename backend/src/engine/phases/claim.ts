@@ -47,7 +47,9 @@ export async function executeClaimPhase(ctx: PhaseContext): Promise<ClaimPhaseRe
       });
 
       for (const claimTx of claimTxs) {
-        const result = await sender.signAndSendTransaction(claimTx.tx);
+        const result = await sender.signAndSendTransaction(claimTx.tx, {
+          confirmationContext: claimTx.blockhash,
+        });
         txSignatures.push(result.signature);
         confirmedAt = new Date().toISOString();
       }

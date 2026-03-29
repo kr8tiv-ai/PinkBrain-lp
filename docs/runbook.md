@@ -1,211 +1,168 @@
 # PinkBrain LP Operator Runbook
 
-This runbook documents the safest known operating path for PinkBrain LP as of March 27, 2026, using the public Bags API/auth surfaces plus the hardening already present in this repository.
+This runbook captures the preferred operating model after the March 28, 2026 hardening passes.
 
-## 1. What Is Confirmed vs. Still Unknown
+## 1. Operator Access Model
 
-Public official docs that do exist:
+Preferred browser sign-in flow:
 
-- [Bags docs home](https://docs.bags.fm/)
-- [How to get a Bags API key](https://docs.bags.fm/faq/how-to-get-api-key)
-- [Bags rate limits](https://docs.bags.fm/faq/what-are-rate-limits)
-- [Get claim transactions](https://docs.bags.fm/api-reference/get-claim-transactions)
-- [Create swap transaction](https://docs.bags.fm/api-reference/create-swap-transaction)
-- [Agent auth init](https://docs.bags.fm/api-reference/agent-auth-init)
-- [Agent auth login](https://docs.bags.fm/api-reference/agent-auth-login)
-- [List agent wallets](https://docs.bags.fm/api-reference/agent-wallet-list)
-- [Export agent wallet](https://docs.bags.fm/api-reference/agent-wallet-export)
-- [ReStream overview](https://docs.bags.fm/data-streaming/restream/overview)
-- [Meteora DAMM v2 integration guide](https://docs.meteora.ag/developer-guide/guides/damm-v2/go-sdk/integration)
-- [Helius docs](https://www.helius.dev/docs)
+1. Mint a short-lived bootstrap token on a trusted machine:
 
-Still not publicly confirmed:
+```powershell
+npm run bootstrap-token -w backend -- --frontend-url https://pinkbrain.example.com
+```
 
-- Bags App Store iframe/container contract
-- official `postMessage` bridge schema
-- manifest schema and review checklist for embedded apps
+2. Open the generated link or paste the bootstrap token into the dashboard.
+3. The frontend exchanges the bootstrap token for a signed HttpOnly session cookie.
+4. Cookie-authenticated write requests must also send:
+   - a trusted `Origin`
+   - a matching `X-CSRF-Token`
 
-Treat embedded mode as capability-detected rather than guaranteed.
+Legacy browser login with `API_AUTH_TOKEN` is disabled by default and should stay disabled outside local debugging.
 
-## 2. Required Secrets and Environment
+Public endpoints:
 
-Copy [.env.example](/C:/Users/lucid/.config/superpowers/worktrees/pinkbrain-lp-git/codex/fortify-final-pass/.env.example) to `.env` and fill in:
+- `GET /api/liveness`
+- `GET /api/health`
+- `GET /api/auth/session`
+
+Protected endpoints:
+
+- `GET /api/readiness`
+- `GET /api/stats`
+- strategy CRUD / pause / resume / run
+- run detail / logs / resume
+
+## 2. Preferred Signing Topology
+
+Preferred production posture:
+
+- Run the compounding backend without `SIGNER_PRIVATE_KEY`.
+- Run `npm run remote-signer -w backend` on an isolated host or private network segment.
+- Configure the main backend with:
+  - `REMOTE_SIGNER_URL`
+  - `REMOTE_SIGNER_AUTH_TOKEN`
+- Keep the long-lived private key only on the remote signer host.
+
+Break-glass fallback:
+
+- `SIGNER_PRIVATE_KEY` on the main backend only for short-lived emergency operation.
+- Bags Agent wallet export only when both:
+  - `ALLOW_AGENT_WALLET_EXPORT=true`
+  - explicit CLI acknowledgement flag is provided
+
+## 3. Required Environment
+
+Minimum secure backend:
 
 - `BAGS_API_KEY`
 - `HELIUS_API_KEY` or `HELIUS_RPC_URL`
-- `API_AUTH_TOKEN` for protected backend routes
-- either `SIGNER_PRIVATE_KEY` or the Bags Agent trio:
-  - `BAGS_AGENT_USERNAME`
-  - `BAGS_AGENT_JWT`
-  - `BAGS_AGENT_WALLET_ADDRESS`
+- `API_AUTH_TOKEN`
+- `SESSION_SECRET`
+- `BOOTSTRAP_TOKEN_SECRET`
+- `REMOTE_SIGNER_URL`
+- `REMOTE_SIGNER_AUTH_TOKEN`
 
-Key runtime toggles:
+Remote signer host:
 
-- `DRY_RUN=true` keeps execution non-destructive
-- `EXECUTION_KILL_SWITCH=true` blocks all strategy execution
-- `MAX_DAILY_RUNS` caps runs per strategy per UTC day
-- `MAX_CLAIMABLE_SOL_PER_RUN` caps claim size per run before execution aborts
+- `REMOTE_SIGNER_PRIVATE_KEY`
+- `REMOTE_SIGNER_AUTH_TOKEN`
+- `REMOTE_SIGNER_RPC_URL` or inherited Solana RPC config
 
-## 3. Verification Before Any Deployment
+Runtime safety toggles:
 
-Run from repo root:
+- `DRY_RUN=true` for non-destructive execution
+- `EXECUTION_KILL_SWITCH=true` to block all compounding runs
+- `MAX_DAILY_RUNS`
+- `MAX_CLAIMABLE_SOL_PER_RUN`
 
-```powershell
-npm install --ignore-scripts
-npm run verify
-```
+## 4. Safe Bring-Up Sequence
 
-Expected result:
+1. Set `DRY_RUN=true`.
+2. Set `EXECUTION_KILL_SWITCH=false`.
+3. Start the remote signer.
+4. Start the backend: `npm run backend`
+5. Start the frontend: `npm run frontend`
+6. Confirm `GET /api/liveness` returns `status: "ok"`.
+7. Confirm `GET /api/readiness` reports signer source `remote-signer`.
+8. Mint a bootstrap token and sign into the frontend.
+9. Trigger one manual dry run.
+10. Review run logs and audit log entries.
+11. Only then disable dry-run.
 
-- backend TypeScript passes
-- backend tests pass
-- frontend build passes
+## 5. CSRF and Session Expectations
 
-If this fails, do not deploy.
+Cookie-authenticated writes are rejected unless all of the following are true:
 
-## 4. Smoke Test the External Dependencies
+- session cookie is valid
+- `Origin` is allowlisted
+- `X-CSRF-Token` matches the signed session payload
 
-The backend includes a non-destructive smoke script:
+Direct bearer-token automation is still allowed for trusted server-to-server callers and does not require CSRF.
 
-```powershell
-npm run smoke -w backend
-```
+## 6. Key Rotation Drill
 
-Optional envs for deeper checks:
+Rotate these independently:
 
-- `SMOKE_WALLET`
-- `SMOKE_QUOTE_INPUT_MINT`
-- `SMOKE_QUOTE_OUTPUT_MINT`
-- `SMOKE_QUOTE_AMOUNT`
+- `API_AUTH_TOKEN`
+- `SESSION_SECRET`
+- `BOOTSTRAP_TOKEN_SECRET`
+- `REMOTE_SIGNER_AUTH_TOKEN`
+- remote signer private key
 
-Recommended order:
+Recommended drill:
 
-1. run smoke with only config present
-2. if you are using Bags Agent signing, run `npm run agent -w backend -- wallet list --token <jwt>`
-3. run smoke with `SMOKE_WALLET`
-4. run smoke with quote envs
-5. optionally set `SMOKE_EXPORT_AGENT_SIGNER=true` to verify the agent wallet export path without printing the full secret
-6. only then move to scheduled/manual execution
+1. Enable `DRY_RUN=true`.
+2. Pause manual operator activity.
+3. Rotate `REMOTE_SIGNER_AUTH_TOKEN` on both hosts.
+4. Rotate bootstrap/session secrets on the backend host.
+5. Mint a new bootstrap token and verify sign-in works.
+6. Rotate the remote signer private key if required.
+7. Trigger a dry-run manual execution.
+8. Review readiness, audit logs, and the last successful signature path.
 
-## 5. Safe Bring-Up Sequence
+## 7. Incident Response
 
-Recommended bring-up for a fresh environment:
+If the operator secret or signer key may be compromised:
 
-1. set `DRY_RUN=true`
-2. set `EXECUTION_KILL_SWITCH=false`
-3. run `npm run smoke -w backend`
-4. start backend and frontend
-5. confirm `/api/health` returns `status: "ok"` or an intentionally understood degraded state
-6. trigger one manual strategy run and confirm it completes as a dry-run
-7. review audit logs and run state transitions
-8. only then provide a live signer and disable dry-run
+1. Set `EXECUTION_KILL_SWITCH=true`.
+2. Stop the remote signer.
+3. Revoke or rotate:
+   - `API_AUTH_TOKEN`
+   - `SESSION_SECRET`
+   - `BOOTSTRAP_TOKEN_SECRET`
+   - `REMOTE_SIGNER_AUTH_TOKEN`
+   - remote signer private key
+4. Invalidate any outstanding bootstrap links by rotating `BOOTSTRAP_TOKEN_SECRET`.
+5. Restart services with fresh secrets.
+6. Re-verify with `npm run verify`.
+7. Resume only after a dry-run manual cycle succeeds.
 
-### Bags Agent onboarding
+## 8. Deployment Hardening Notes
 
-The repository now includes a helper CLI for the public agent auth flow:
+- Keep the remote signer on a private interface whenever possible.
+- Restrict `REMOTE_SIGNER_URL` traffic to the backend host or VPN.
+- Do not expose `REMOTE_SIGNER_PRIVATE_KEY` to CI or the frontend host.
+- Keep `ALLOW_BROWSER_OPERATOR_TOKEN_LOGIN=false`.
+- Keep `ALLOW_AGENT_WALLET_EXPORT=false` unless actively recovering.
+- Use `GET /api/liveness` for public health checks and keep `GET /api/readiness` behind auth.
 
-```powershell
-npm run agent -w backend -- auth init --username your_agent_username
-npm run agent -w backend -- auth login --public-identifier <uuid> --secret <secret> --post-id <moltbook_post_id> --env
-npm run agent -w backend -- wallet list --token <jwt>
-npm run agent -w backend -- wallet export --token <jwt> --wallet <wallet_address> --env
-```
+## 9. Remaining External Unknowns
 
-Default output is redacted. Use `--env` or `--raw-*` only when intentionally setting secrets.
+Confirmed public Bags docs exist for:
 
-## 6. Live Mode Preconditions
+- claimable positions
+- claim transactions
+- agent auth
+- agent wallet export
+- send transaction
+- partner stats
+- ReStream
 
-Do not enable live mode unless all of the following are true:
+Still not publicly confirmed:
 
-- `DRY_RUN=false`
-- either `SIGNER_PRIVATE_KEY` is configured or Bags Agent export is configured with `BAGS_AGENT_JWT` plus a resolvable wallet
-- `API_AUTH_TOKEN` is configured
-- `/api/health` shows `executionMode: "live"`
-- Bags and Helius credentials are valid
-- one dry-run cycle already succeeded
+- App Store iframe contract
+- `window.bagsAgent` API contract
+- `postMessage` schema for embedded apps
 
-## 7. Operational Endpoints
-
-Important backend endpoints:
-
-- `GET /api/health`
-- `GET /api/stats`
-- `GET /api/strategies`
-- `POST /api/strategies/:id/run`
-- `GET /api/runs/:id/logs`
-
-Interpretation guidance:
-
-- `/api/health` is the source of truth for dependency readiness
-- `/api/stats` summarizes runtime control state for the dashboard
-- audit logs on a run are the fastest way to localize which phase failed
-
-## 8. Kill Switch and Emergency Response
-
-If anything looks unsafe:
-
-1. set `EXECUTION_KILL_SWITCH=true`
-2. restart the backend if needed so config reloads
-3. confirm `/api/health` reports `executionMode: "blocked"`
-4. inspect recent run logs
-5. keep `DRY_RUN=true` during recovery testing
-
-Use the kill switch for:
-
-- signer issues
-- Bags API uncertainty
-- abnormal quote or claim values
-- suspected rate-limit churn
-- any doubt around Meteora or wallet safety
-
-## 9. Rollback Strategy
-
-Application rollback:
-
-1. enable kill switch
-2. redeploy the previous known-good backend/frontend image
-3. rerun `npm run smoke -w backend`
-4. keep dry-run enabled until confidence is restored
-
-Configuration rollback:
-
-1. restore previous `.env`
-2. restart backend
-3. confirm `/api/health` and `/api/stats`
-
-## 10. Recovery of Failed or Interrupted Runs
-
-Use:
-
-- `GET /api/runs`
-- `GET /api/runs/:id/logs`
-- `POST /api/runs/:id/resume`
-
-Preferred recovery path:
-
-1. inspect logs
-2. identify the failed phase
-3. keep kill switch or dry-run on while validating the fix
-4. resume only after the root cause is understood
-
-## 11. Rate-Limit Discipline
-
-The Bags client now distinguishes high-priority versus low-priority requests. Critical execution paths should keep priority reserved for:
-
-- claim transaction generation
-- swap quote and transaction generation
-- execution-time requests tied directly to an active run
-
-Avoid noisy background polling when remaining Bags quota is low.
-
-Multiple Bags client instances now coordinate through a shared in-process limiter so smoke tests, API requests, and engine execution do not burn quota independently.
-
-## 12. Embedded-Mode Expectations
-
-The frontend now capability-detects Bags embedding rather than assuming it:
-
-- embedded mode: tries injected agent first, then guarded `postMessage`
-- standalone mode: falls back to manual wallet entry
-- runtime warnings surface backend dry-run, kill switch, signer absence, and wallet bridge availability
-
-Until Bags publishes an official App Store shell contract, do not assume an undocumented iframe bridge is production-safe.
+Treat embedded mode as capability-detected rather than contractually guaranteed.

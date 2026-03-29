@@ -204,7 +204,7 @@ describe('StateMachine', () => {
         },
         liquidityAdd: { positionNft: 'nft-1', liquidityDelta: '100', txSignature: 'sig4' },
         lock: { txSignature: 'sig5', permanentLockedLiquidity: '100' },
-        distribution: { totalYieldClaimed: 0, recipientCount: 0, txSignatures: [] },
+        distribution: { totalYieldClaimed: '0', recipientCount: 0, txSignatures: [] },
       });
       expect(sm.resumeNextState(run)).toBe('COMPLETE');
     });

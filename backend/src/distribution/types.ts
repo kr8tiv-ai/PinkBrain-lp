@@ -11,7 +11,7 @@ import type { DistributionMode } from '../types/index.js';
 
 export interface DistributionRecipient {
   owner: string;
-  amount: number;
+  amount: bigint;
 }
 
 export interface DistributionBatch {

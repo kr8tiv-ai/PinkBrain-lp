@@ -58,7 +58,7 @@ async function main() {
   );
 
   if (signerResolution.source === 'none') {
-    const message = 'No live signer is configured. Set SIGNER_PRIVATE_KEY or Bags agent auth env vars.';
+    const message = 'No live signer is configured. Set SIGNER_PRIVATE_KEY or explicitly enable the break-glass Bags agent export path.';
     if (config.nodeEnv === 'production') {
       throw new Error(message);
     }

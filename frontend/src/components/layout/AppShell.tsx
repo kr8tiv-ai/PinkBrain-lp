@@ -1,5 +1,7 @@
-import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Plus, Activity } from 'lucide-react';
+import { Activity, LayoutDashboard, LogOut, Plus, ShieldCheck } from 'lucide-react';
+import { Link, Outlet, useLocation } from 'react-router-dom';
+import { useLogout } from '../../api/auth';
+import { Button } from '../common/Button';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -8,42 +10,59 @@ const navItems = [
 
 export function AppShell() {
   const location = useLocation();
+  const logout = useLogout();
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-50 border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
           <Link to="/" className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-pink-500" />
-            <span className="font-bold text-lg">
+            <Activity className="h-5 w-5 text-pink-500" />
+            <span className="text-lg font-bold">
               Pink<span className="text-pink-500">Brain</span> LP
             </span>
           </Link>
-          <nav className="flex items-center gap-1">
-            {navItems.map((item) => {
-              const active = location.pathname === item.to;
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                    active
-                      ? 'bg-pink-600/20 text-pink-400'
-                      : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                  }`}
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em] text-emerald-200 sm:flex">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Secure Session
+            </div>
+
+            <nav className="flex items-center gap-1">
+              {navItems.map((item) => {
+                const active = location.pathname === item.to;
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                      active
+                        ? 'bg-pink-600/20 text-pink-400'
+                        : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                    }`}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => logout.mutate()}
+              disabled={logout.isPending}
+            >
+              <LogOut className="h-4 w-4" />
+              {logout.isPending ? 'Signing out...' : 'Sign out'}
+            </Button>
+          </div>
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-6">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         <Outlet />
       </main>
     </div>

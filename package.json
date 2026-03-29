@@ -14,7 +14,7 @@
     "test": "npm run test -ws",
     "lint": "npm run lint -ws",
     "verify:backend": "npm exec -- tsc -p backend/tsconfig.json && npm exec --workspace backend -- vitest run",
-    "verify:frontend": "npm exec --workspace frontend -- tsc -b && npm exec --workspace frontend -- vite build",
+    "verify:frontend": "npm exec --workspace frontend -- tsc -b && npm exec --workspace frontend -- vitest run && npm exec --workspace frontend -- vite build",
     "verify": "npm run verify:backend && npm run verify:frontend"
   },
   "keywords": [
@@ -26,6 +26,25 @@
   ],
   "author": "KR8TIV AI",
   "license": "MIT",
+  "overrides": {
+    "axios": "^1.13.5",
+    "esbuild": "^0.27.4",
+    "mocha": "^11.7.5",
+    "diff": "^8.0.4",
+    "js-yaml": "^4.1.1",
+    "minimatch": "^10.2.4",
+    "nanoid": "^5.1.7",
+    "serialize-javascript": "^7.0.5",
+    "@solana/spl-token": "^0.4.13",
+    "@meteora-ag/cp-amm-sdk": "^1.4.0",
+    "@meteora-ag/dynamic-bonding-curve-sdk": "^1.5.7",
+    "@bagsfm/bags-sdk": {
+      "axios": "^1.13.5",
+      "@solana/spl-token": "^0.4.13",
+      "@meteora-ag/cp-amm-sdk": "^1.4.0",
+      "@meteora-ag/dynamic-bonding-curve-sdk": "^1.5.7"
+    }
+  },
   "engines": {
     "node": ">=20.0.0"
   }

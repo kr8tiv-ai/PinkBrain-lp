@@ -19,7 +19,7 @@ import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 import { useBagsAuth } from '../hooks/useBagsAuth';
 import { truncateAddress, formatDate } from '../utils/format';
-import type { HealthSnapshot } from '../types/strategy';
+import type { ReadinessSnapshot } from '../types/strategy';
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -36,7 +36,7 @@ function statusTone(ok: boolean): string {
     : 'text-orange-300 bg-orange-500/10 border-orange-500/20';
 }
 
-function HealthIssueSummary({ health }: { health: HealthSnapshot }) {
+function HealthIssueSummary({ health }: { health: ReadinessSnapshot }) {
   const issues: string[] = [];
 
   if (health.runtime.killSwitchEnabled) issues.push('execution kill switch is enabled');
@@ -156,7 +156,7 @@ export function Dashboard() {
                   Bags Agent
                 </div>
                 <p className="mt-1 text-[11px] opacity-80">
-                  {agentAuth?.status === 'configured' && 'Ready for backend signer export'}
+                  {agentAuth?.status === 'configured' && 'Ready for the break-glass agent signer path'}
                   {agentAuth?.status === 'partial' && 'JWT or wallet selection is incomplete'}
                   {agentAuth?.status === 'missing' && 'Not configured'}
                   {!agentAuth && 'Loading agent state...'}

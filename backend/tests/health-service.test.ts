@@ -20,10 +20,19 @@ function createConfig(overrides?: Partial<Config>): Config {
     feeThresholdSol: 7,
     apiAuthToken: 'api-token',
     corsOrigins: ['http://localhost:5173'],
+    sessionSecret: 'session-secret',
+    sessionTtlHours: 12,
+    bootstrapTokenSecret: 'bootstrap-secret',
+    bootstrapTokenTtlMinutes: 10,
+    allowBrowserOperatorTokenLogin: false,
     bagsAgentUsername: '',
     bagsAgentJwt: '',
     bagsAgentWalletAddress: '',
+    allowAgentWalletExport: false,
     signerPrivateKey: 'signer-key',
+    remoteSignerUrl: '',
+    remoteSignerAuthToken: '',
+    remoteSignerTimeoutMs: 10000,
     dryRun: false,
     executionKillSwitch: false,
     maxDailyRuns: 0,
@@ -51,7 +60,7 @@ describe('HealthService', () => {
   it('reports dependency and runtime readiness when the backend is configured', () => {
     const service = new HealthService(database, createConfig());
 
-    const snapshot = service.getSnapshot({
+    const snapshot = service.getReadinessSnapshot({
       scheduledStrategies: 3,
       version: '0.1.0',
     });
@@ -70,7 +79,7 @@ describe('HealthService', () => {
       dryRun: false,
     }));
 
-    const snapshot = service.getSnapshot({
+    const snapshot = service.getReadinessSnapshot({
       scheduledStrategies: 0,
       version: '0.1.0',
     });
@@ -90,7 +99,7 @@ describe('HealthService', () => {
       resolvedAgentWalletAddress: 'wallet-a',
     });
 
-    const snapshot = service.getSnapshot({
+    const snapshot = service.getReadinessSnapshot({
       scheduledStrategies: 1,
       version: '0.1.0',
     });
@@ -98,5 +107,37 @@ describe('HealthService', () => {
     expect(snapshot.dependencies.agentAuth.status).toBe('configured');
     expect(snapshot.dependencies.signer.status).toBe('configured');
     expect(snapshot.dependencies.signer.source).toBe('bags-agent');
+  });
+
+  it('reports remote-signer mode when the backend delegates signing off-box', () => {
+    const service = new HealthService(database, createConfig({
+      signerPrivateKey: '',
+      remoteSignerUrl: 'https://remote-signer.example',
+      remoteSignerAuthToken: 'remote-auth-token',
+    }), {
+      signerSource: 'remote-signer',
+      resolvedAgentWalletAddress: null,
+    });
+
+    const snapshot = service.getReadinessSnapshot({
+      scheduledStrategies: 1,
+      version: '0.1.0',
+    });
+
+    expect(snapshot.dependencies.signer.status).toBe('configured');
+    expect(snapshot.dependencies.signer.source).toBe('remote-signer');
+  });
+
+  it('returns a minimal liveness snapshot without operational dependency detail', () => {
+    const service = new HealthService(database, createConfig());
+
+    const snapshot = service.getLivenessSnapshot({
+      version: '0.1.0',
+    });
+
+    expect(snapshot.status).toBe('ok');
+    expect(snapshot.version).toBe('0.1.0');
+    expect(snapshot).not.toHaveProperty('dependencies');
+    expect(snapshot).not.toHaveProperty('runtime');
   });
 });

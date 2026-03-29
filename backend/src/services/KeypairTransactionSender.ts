@@ -30,12 +30,10 @@ function parsePrivateKey(value: string): Uint8Array {
 
 function decodeTransaction(serializedTx: string): Transaction | VersionedTransaction {
   const buffer = Buffer.from(serializedTx, 'base64');
-
-  try {
-    return VersionedTransaction.deserialize(buffer);
-  } catch {
-    return Transaction.from(buffer);
-  }
+  const isVersioned = buffer.length > 0 && (buffer[0] & 0x80) !== 0;
+  return isVersioned
+    ? VersionedTransaction.deserialize(buffer)
+    : Transaction.from(buffer);
 }
 
 export class KeypairTransactionSender implements TransactionSender {
@@ -55,9 +53,7 @@ export class KeypairTransactionSender implements TransactionSender {
   ): Promise<{ signature: string }> {
     const transaction = decodeTransaction(serializedTx);
     const signers = [this.signer, ...(options?.extraSigners ?? [])];
-
-    // Get blockhash context for modern confirmTransaction
-    const { blockhash, lastValidBlockHeight } =
+    const confirmationContext = options?.confirmationContext ??
       await this.connection.getLatestBlockhash(this.commitment);
 
     if (transaction instanceof VersionedTransaction) {
@@ -67,7 +63,7 @@ export class KeypairTransactionSender implements TransactionSender {
         skipPreflight: options?.skipPreflight,
       });
       await this.connection.confirmTransaction(
-        { signature, blockhash, lastValidBlockHeight },
+        { signature, ...confirmationContext },
         this.commitment,
       );
       return { signature };
@@ -79,7 +75,7 @@ export class KeypairTransactionSender implements TransactionSender {
       skipPreflight: options?.skipPreflight,
     });
     await this.connection.confirmTransaction(
-      { signature, blockhash, lastValidBlockHeight },
+      { signature, ...confirmationContext },
       this.commitment,
     );
     return { signature };

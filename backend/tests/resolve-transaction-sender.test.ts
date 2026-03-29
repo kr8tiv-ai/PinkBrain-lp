@@ -14,10 +14,19 @@ function createConfig(overrides?: Partial<Config>): Config {
     feeThresholdSol: 7,
     apiAuthToken: 'api-token',
     corsOrigins: ['http://localhost:5173'],
+    sessionSecret: 'session-secret',
+    sessionTtlHours: 12,
+    bootstrapTokenSecret: 'bootstrap-secret',
+    bootstrapTokenTtlMinutes: 10,
+    allowBrowserOperatorTokenLogin: false,
     bagsAgentUsername: 'pinkbrain',
     bagsAgentJwt: '',
     bagsAgentWalletAddress: '',
+    allowAgentWalletExport: false,
     signerPrivateKey: '',
+    remoteSignerUrl: '',
+    remoteSignerAuthToken: '',
+    remoteSignerTimeoutMs: 10000,
     dryRun: false,
     executionKillSwitch: false,
     maxDailyRuns: 0,
@@ -48,11 +57,60 @@ describe('resolveTransactionSender', () => {
     expect(result.resolvedWalletAddress).toBeNull();
   });
 
+  it('prefers a configured remote signer over local key material', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ signature: 'remote-signature' }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    ));
+
+    const result = await resolveTransactionSender(
+      createConfig({
+        remoteSignerUrl: 'https://remote-signer.example',
+        remoteSignerAuthToken: 'remote-auth-token',
+        signerPrivateKey: JSON.stringify(Array.from(Keypair.generate().secretKey)),
+      }),
+      new Connection('https://api.mainnet-beta.solana.com'),
+      {
+        initializeAuth: vi.fn(),
+        completeAuth: vi.fn(),
+        listWallets: vi.fn(),
+        exportWallet: vi.fn(),
+      },
+    );
+
+    const sendResult = await result.sender.signAndSendTransaction('dGVzdA==');
+
+    expect(result.source).toBe('remote-signer');
+    expect(result.resolvedWalletAddress).toBeNull();
+    expect(sendResult).toEqual({ signature: 'remote-signature' });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires an explicit break-glass flag before exporting a Bags agent wallet', async () => {
+    await expect(resolveTransactionSender(
+      createConfig({
+        bagsAgentJwt: 'jwt-token',
+        allowAgentWalletExport: false,
+      }),
+      new Connection('https://api.mainnet-beta.solana.com'),
+      {
+        initializeAuth: vi.fn(),
+        completeAuth: vi.fn(),
+        listWallets: vi.fn().mockResolvedValue(['wallet-a']),
+        exportWallet: vi.fn(),
+      },
+    )).rejects.toThrow('ALLOW_AGENT_WALLET_EXPORT=true');
+  });
+
   it('can derive a signer from a single-wallet Bags agent', async () => {
     const keypair = Keypair.generate();
     const result = await resolveTransactionSender(
       createConfig({
         bagsAgentJwt: 'jwt-token',
+        allowAgentWalletExport: true,
       }),
       new Connection('https://api.mainnet-beta.solana.com'),
       {
@@ -73,6 +131,7 @@ describe('resolveTransactionSender', () => {
     await expect(resolveTransactionSender(
       createConfig({
         bagsAgentJwt: 'jwt-token',
+        allowAgentWalletExport: true,
       }),
       new Connection('https://api.mainnet-beta.solana.com'),
       {

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 export type ToastType = 'success' | 'error' | 'info';
 
@@ -39,12 +39,14 @@ export function useToast(autoDismissMs = 5000) {
     [autoDismissMs, dismiss],
   );
 
-  // Subscribe to global pushes
-  const subscribeRef = useRef(false);
-  if (!subscribeRef.current) {
-    subscribeRef.current = true;
+  useEffect(() => {
     listeners.add(addToast);
-  }
+    return () => {
+      listeners.delete(addToast);
+      timers.current.forEach((timer) => clearTimeout(timer));
+      timers.current.clear();
+    };
+  }, [addToast]);
 
   return { toasts, dismiss, addToast };
 }

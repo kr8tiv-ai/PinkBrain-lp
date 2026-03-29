@@ -54,7 +54,7 @@ Most token projects collect fees and let them sit. PinkBrain converts those fees
 - **Compounding returns** -- LP fees generate more fees, which generate more fees
 - **Holder distribution** -- route LP fee income to your top 100 holders automatically
 - **Any token pair** -- not limited to your own token; pick any two SPL tokens on Solana
-- **Trustless** -- uses Bags Agent auth (no private key export), on-chain locking is irreversible and verifiable
+- **Operator-safe UI** -- browser sessions use signed HttpOnly cookies instead of persisting the backend bearer token in app state
 
 ---
 
@@ -95,11 +95,39 @@ npm run backend
 ```env
 BAGS_API_KEY=your_bags_api_key        # Required - from Bags.fm
 HELIUS_API_KEY=your_helius_api_key    # Optional - enhanced RPC + DAS API
+API_AUTH_TOKEN=change_me              # Required - operator login + direct API access
+SESSION_SECRET=change_me_too          # Recommended - signs HttpOnly browser sessions
 SOLANA_NETWORK=mainnet-beta           # or devnet
 FEE_THRESHOLD_SOL=7                   # minimum SOL before claiming triggers
 NODE_ENV=development
 LOG_LEVEL=info
 ```
+
+### Frontend Sign-In
+
+The preferred operator path is now:
+
+1. Mint a short-lived bootstrap token on a trusted machine:
+
+```bash
+npm run bootstrap-token -w backend -- --frontend-url http://localhost:5173
+```
+
+2. Open the generated link or paste the bootstrap token into the React dashboard.
+3. The frontend exchanges that token for a signed HttpOnly session cookie via `POST /api/auth/bootstrap/exchange`.
+
+The browser never needs the long-lived `API_AUTH_TOKEN`, and cookie-authenticated writes also require a matching CSRF header plus a trusted `Origin`.
+
+Public health surface:
+
+- `GET /api/liveness`
+- `GET /api/health` (legacy alias of liveness)
+
+Protected operational surface:
+
+- `GET /api/readiness`
+- `GET /api/stats`
+- strategy and run CRUD endpoints
 
 ---
 
@@ -133,7 +161,8 @@ LOG_LEVEL=info
 |----------|--------|-----|
 | LP Protocol | **DAMM v2** over DLMM | Only protocol supporting permanent lock + fee claims |
 | Swaps | **Bags API** | Platform fee compliance (required by Bags ecosystem) |
-| Auth | **Bags Agent** | No private key export -- security first |
+| Operator Auth | **HttpOnly session + bootstrap exchange** | Short-lived browser bootstrap tokens avoid exposing the long-lived backend secret |
+| Signing | **Remote signer boundary** | Main backend can run without local long-lived key material; break-glass export stays disabled by default |
 | RPC | **Helius** | Priority fees, DAS API for holder snapshots |
 | Storage | **SQLite** (hackathon) | Simple, zero-config; PostgreSQL planned for production |
 
@@ -146,7 +175,7 @@ Handles all Bags.fm platform interactions with built-in rate limiting (1,000 req
 
 - `getClaimablePositions()` -- check accrued fees
 - `getTotalClaimableSol()` -- aggregate claimable SOL across positions
-- `getClaimTransactions()` -- generate claim transaction
+- `getClaimTransactions()` -- generate claim transactions with preserved confirmation context
 - `getTradeQuote()` / `createSwapTransaction()` -- swap into target tokens
 - Exponential backoff when approaching rate limits
 
@@ -191,10 +220,49 @@ PinkBrain-lp/
 
 ```bash
 npm run backend        # Start backend dev server
+npm run frontend       # Start frontend dev server
 npm test               # Run Vitest test suite
 npm run build          # TypeScript compile
 npm run lint           # ESLint
 ```
+
+### Remote Signer
+
+Preferred production posture:
+
+```bash
+npm run remote-signer -w backend
+```
+
+Point the main backend at that isolated signer process with:
+
+```env
+REMOTE_SIGNER_URL=https://remote-signer.internal
+REMOTE_SIGNER_AUTH_TOKEN=change_me
+```
+
+The remote signer speaks a narrow `/sign-and-send` contract, so the main backend never needs to load the long-lived signing key.
+
+Additional operator documentation:
+
+- `docs/runbook.md`
+- `docs/dependency-audit.md`
+- `docs/operations/remote-signer.md`
+- `docs/operations/secret-rotation.md`
+
+### Break-Glass Bags Agent Export
+
+PinkBrain still supports exporting a Bags Agent wallet only as an explicit fallback:
+
+```bash
+npm run agent -w backend -- wallet export \
+  --token <jwt> \
+  --wallet <wallet_address> \
+  --i-understand-this-exports-a-private-key \
+  --env
+```
+
+You must also set `ALLOW_AGENT_WALLET_EXPORT=true` before the backend will accept that signer path at runtime.
 
 ---
 
@@ -202,10 +270,10 @@ npm run lint           # ESLint
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| **1. Foundation** | SDK integration, 3 API clients, POC cycle | In Progress |
-| **2. Core Engine** | Strategy persistence, orchestrator state machine, scheduler, distribution | Planned |
-| **3. UI** | React frontend for Bags App Store -- strategy CRUD, run history, controls | Planned |
-| **4. Hardening** | Error recovery, observability, security review, hackathon submission | Planned |
+| **1. Foundation** | SDK integration, 3 API clients, POC cycle | Complete |
+| **2. Core Engine** | Strategy persistence, orchestrator state machine, scheduler, distribution | Complete |
+| **3. UI** | React frontend for Bags App Store -- strategy CRUD, run history, controls | Complete |
+| **4. Hardening** | Bootstrap auth, CSRF, bigint-safe distribution, blockhash-safe confirms, remote signer path | Complete |
 
 ---
 

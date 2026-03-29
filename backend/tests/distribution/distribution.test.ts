@@ -8,8 +8,9 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Keypair, PublicKey } from '@solana/web3.js';
+import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
 import BN from 'bn.js';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { executeDistributePhase } from '../../src/engine/phases/distribute.js';
 import { buildTop100Distribution } from '../../src/distribution/top-100.js';
 import { buildOwnerOnlyDistribution } from '../../src/distribution/owner-only.js';
@@ -141,6 +142,14 @@ const BURN_ADDRESSES = [
   'Dead111111111111111111111111111111111111111',
 ];
 
+function extractSplTransferAmounts(serializedTx: string): bigint[] {
+  const transaction = Transaction.from(Buffer.from(serializedTx, 'base64'));
+  return transaction.instructions
+    .filter((instruction) => instruction.programId.equals(TOKEN_PROGRAM_ID))
+    .filter((instruction) => instruction.data.length === 9)
+    .map((instruction) => instruction.data.readBigUInt64LE(1));
+}
+
 // ---------------------------------------------------------------------------
 // Owner-Only Distribution Tests
 // ---------------------------------------------------------------------------
@@ -163,7 +172,7 @@ describe('buildOwnerOnlyDistribution', () => {
     const result = await buildOwnerOnlyDistribution(ctx);
 
     expect(result).toEqual({
-      totalYieldClaimed: 1_000_000_000,
+      totalYieldClaimed: '1000000000',
       recipientCount: 1,
       txSignatures: expect.arrayContaining([expect.stringMatching(/^sig-/)]),
     });
@@ -209,7 +218,7 @@ describe('buildOwnerOnlyDistribution', () => {
     const result = await buildOwnerOnlyDistribution(ctx);
 
     expect(result).toEqual({
-      totalYieldClaimed: 0,
+      totalYieldClaimed: '0',
       recipientCount: 0,
       txSignatures: [],
     });
@@ -228,10 +237,38 @@ describe('buildOwnerOnlyDistribution', () => {
     const result = await buildOwnerOnlyDistribution(ctx);
 
     expect(result).toEqual({
-      totalYieldClaimed: 0,
+      totalYieldClaimed: '0',
       recipientCount: 0,
       txSignatures: [],
     });
+  });
+
+  it('preserves large token balances without narrowing to Number', async () => {
+    const sentTransactions: string[] = [];
+    const sender: TransactionSender = {
+      signAndSendTransaction: vi.fn(async (tx: string) => {
+        sentTransactions.push(tx);
+        return { signature: 'owner-only-sig' };
+      }),
+    };
+    const connection = createMockConnection({
+      value: { amount: '9007199254740993', decimals: 9, uiAmount: 0 },
+    });
+    const heliusClient = createMockHeliusClient({
+      getConnection: () => connection,
+    });
+    const ctx = createContext({
+      sender,
+      heliusClient,
+      strategy: createBaseStrategy({ distribution: 'OWNER_ONLY' }),
+    });
+
+    const result = await buildOwnerOnlyDistribution(ctx);
+    const transferAmounts = sentTransactions.flatMap(extractSplTransferAmounts);
+    const totalTransferred = transferAmounts.reduce((sum, amount) => sum + amount, 0n);
+
+    expect(result.totalYieldClaimed).toBe('9007199254740993');
+    expect(totalTransferred).toBe(9007199254740993n);
   });
 });
 
@@ -404,7 +441,7 @@ describe('buildTop100Distribution', () => {
 
       // 0.3 * 1_000_000 = 300_000 (exact, no truncation)
       // 0.7 * 1_000_000 = 700_000 (exact, no truncation)
-      expect(result.totalYieldClaimed).toBe(totalAmount);
+      expect(result.totalYieldClaimed).toBe(totalAmount.toString());
       expect(result.recipientCount).toBe(2);
     });
 
@@ -525,7 +562,7 @@ describe('buildTop100Distribution', () => {
       const result = await buildTop100Distribution(ctx);
 
       expect(result).toEqual({
-        totalYieldClaimed: 0,
+        totalYieldClaimed: '0',
         recipientCount: 0,
         txSignatures: [],
       });
@@ -557,7 +594,7 @@ describe('buildTop100Distribution', () => {
       const result = await buildTop100Distribution(ctx);
 
       expect(result).toEqual({
-        totalYieldClaimed: 0,
+        totalYieldClaimed: '0',
         recipientCount: 0,
         txSignatures: [],
       });
@@ -577,7 +614,7 @@ describe('buildTop100Distribution', () => {
       const result = await buildTop100Distribution(ctx);
 
       expect(result).toEqual({
-        totalYieldClaimed: 0,
+        totalYieldClaimed: '0',
         recipientCount: 0,
         txSignatures: [],
       });
@@ -606,9 +643,43 @@ describe('buildTop100Distribution', () => {
 
       const result = await buildTop100Distribution(ctx);
 
-      expect(result.totalYieldClaimed).toBe(totalAmount);
+      expect(result.totalYieldClaimed).toBe(totalAmount.toString());
       expect(result.recipientCount).toBe(1);
       expect(result.txSignatures).toHaveLength(1);
+    });
+
+    it('preserves large holder distributions without losing lamports', async () => {
+      const holders = generateHolders([1, 1]);
+      const sentTransactions: string[] = [];
+      const sender: TransactionSender = {
+        signAndSendTransaction: vi.fn(async (tx: string) => {
+          sentTransactions.push(tx);
+          return { signature: `sig-${sentTransactions.length}` };
+        }),
+      };
+      const heliusClient = createMockHeliusClient({
+        getTopTokenHolders: async () => holders,
+        calculateDistributionWeights: () => [
+          { owner: holders[0].owner, weight: 0.5, balance: holders[0].balance },
+          { owner: holders[1].owner, weight: 0.5, balance: holders[1].balance },
+        ],
+        getConnection: () => createMockConnection({
+          value: { amount: '9007199254740993', decimals: 9, uiAmount: 0 },
+        }),
+      });
+
+      const ctx = createContext({
+        sender,
+        heliusClient,
+        strategy: createBaseStrategy({ distribution: 'TOP_100_HOLDERS' }),
+      });
+
+      const result = await buildTop100Distribution(ctx);
+      const transferAmounts = sentTransactions.flatMap(extractSplTransferAmounts);
+      const totalTransferred = transferAmounts.reduce((sum, amount) => sum + amount, 0n);
+
+      expect(result.totalYieldClaimed).toBe('9007199254740993');
+      expect(totalTransferred).toBe(9007199254740993n);
     });
   });
 });
@@ -636,7 +707,7 @@ describe('executeDistributePhase — mode selection', () => {
     const result = await executeDistributePhase(ctx);
 
     expect(result.recipientCount).toBe(1);
-    expect(result.totalYieldClaimed).toBe(1_000_000_000);
+    expect(result.totalYieldClaimed).toBe('1000000000');
     expect(result.txSignatures.length).toBe(1);
   });
 
@@ -668,7 +739,7 @@ describe('executeDistributePhase — mode selection', () => {
 
     const result = await executeDistributePhase(ctx);
 
-    expect(result.totalYieldClaimed).toBe(totalAmount);
+    expect(result.totalYieldClaimed).toBe(totalAmount.toString());
     expect(result.recipientCount).toBe(6);
     expect(result.txSignatures.length).toBeGreaterThan(1); // multiple batches
   });

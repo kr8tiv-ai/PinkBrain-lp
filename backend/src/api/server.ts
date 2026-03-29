@@ -1,12 +1,12 @@
 /**
- * Fastify HTTP server setup with CORS and error mapping.
+ * Fastify HTTP server setup with CORS, auth, and error mapping.
  */
 
-import { timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import type { ApiContext } from './context.js';
+import { registerAuthRoutes } from './routes/auth.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerStrategyRoutes } from './routes/strategies.js';
 import { registerRunRoutes } from './routes/runs.js';
@@ -19,10 +19,39 @@ import {
 } from '../services/errors.js';
 import { ConcurrentRunError } from '../engine/Engine.js';
 import { createLoggerOptions } from '../services/logger.js';
+import {
+  getSessionFromRequest,
+  hasValidCsrfToken,
+  hasValidAuthorizationHeader,
+} from '../services/session.js';
 
 export async function createServer(ctx: ApiContext) {
   const app = Fastify({ logger: createLoggerOptions(ctx.config) as any });
   const allowedOrigins = new Set(ctx.config.corsOrigins);
+  const publicRoutes = new Set([
+    '/api/health',
+    '/api/liveness',
+    '/api/auth/login',
+    '/api/auth/logout',
+    '/api/auth/session',
+    '/api/auth/bootstrap/exchange',
+  ]);
+  const isAllowedOrigin = (origin: string | undefined): boolean => {
+    if (!origin) {
+      return false;
+    }
+
+    if (allowedOrigins.has(origin)) {
+      return true;
+    }
+
+    try {
+      const hostname = new URL(origin).hostname;
+      return hostname === 'bags.fm' || hostname.endsWith('.bags.fm');
+    } catch {
+      return false;
+    }
+  };
 
   // Global rate limiting
   await app.register(rateLimit, {
@@ -37,23 +66,14 @@ export async function createServer(ctx: ApiContext) {
         return;
       }
 
-      if (allowedOrigins.has(origin)) {
-        cb(null, true);
-        return;
-      }
-
-      try {
-        const hostname = new URL(origin).hostname;
-        cb(null, hostname === 'bags.fm' || hostname.endsWith('.bags.fm'));
-      } catch {
-        cb(null, false);
-      }
+      cb(null, isAllowedOrigin(origin));
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
   });
 
   app.addHook('onRequest', async (request, reply) => {
-    if (request.method === 'OPTIONS' || request.url === '/api/health') {
+    if (request.method === 'OPTIONS' || publicRoutes.has(request.url)) {
       return;
     }
 
@@ -65,12 +85,34 @@ export async function createServer(ctx: ApiContext) {
       return;
     }
 
-    const expected = Buffer.from(`Bearer ${ctx.config.apiAuthToken}`);
-    const received = Buffer.from(request.headers.authorization ?? '');
-    if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+    const hasBearerToken = hasValidAuthorizationHeader(
+      request.headers.authorization,
+      ctx.config.apiAuthToken,
+    );
+    const session = getSessionFromRequest(request, ctx.config);
+    const hasSession = session !== null;
+
+    if (!hasBearerToken && !hasSession) {
       reply.code(401).send({
         error: 'Unauthorized',
         message: 'Missing or invalid API token',
+      });
+      return;
+    }
+
+    const mutatesState = request.method !== 'GET' && request.method !== 'HEAD';
+    if (hasSession && !hasBearerToken && mutatesState && !isAllowedOrigin(request.headers.origin)) {
+      reply.code(403).send({
+        error: 'Forbidden',
+        message: 'Cookie-authenticated writes require a trusted Origin header',
+      });
+      return;
+    }
+
+    if (hasSession && !hasBearerToken && mutatesState && !hasValidCsrfToken(request, session)) {
+      reply.code(403).send({
+        error: 'Forbidden',
+        message: 'Cookie-authenticated writes require a valid CSRF token',
       });
       return;
     }
@@ -123,7 +165,7 @@ export async function createServer(ctx: ApiContext) {
 
   // Structured request/response logging (skip noisy health checks)
   app.addHook('onResponse', async (request, reply) => {
-    if (request.url === '/api/health') return;
+    if (request.url === '/api/health' || request.url === '/api/liveness') return;
     app.log.info({
       method: request.method,
       url: request.url,
@@ -132,6 +174,7 @@ export async function createServer(ctx: ApiContext) {
     }, 'request completed');
   });
 
+  registerAuthRoutes(app, ctx);
   registerHealthRoutes(app, ctx);
   registerStrategyRoutes(app, ctx);
   registerRunRoutes(app, ctx);
