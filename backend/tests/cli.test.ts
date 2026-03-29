@@ -43,16 +43,22 @@ const {
 });
 
 vi.mock('../src/services/Database.js', () => ({
-  Database: vi.fn().mockImplementation(() => ({
-    init: vi.fn(),
-    getDb: vi.fn(),
-    close: vi.fn(),
-  })),
+  Database: vi.fn(function MockDatabase() {
+    return {
+      init: vi.fn(),
+      getDb: vi.fn(),
+      close: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('@solana/web3.js', () => ({
-  Connection: vi.fn().mockImplementation(() => ({})),
-  PublicKey: vi.fn(),
+  Connection: vi.fn(function MockConnection() {
+    return {};
+  }),
+  PublicKey: vi.fn(function MockPublicKey(value?: string) {
+    return { value };
+  }),
 }));
 
 vi.mock('../src/services/StrategyService.js', () => ({

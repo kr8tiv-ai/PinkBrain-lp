@@ -20,8 +20,9 @@ import {
 import { ConcurrentRunError } from '../engine/Engine.js';
 import { createLoggerOptions } from '../services/logger.js';
 import {
+  getSessionFromRequest,
+  hasValidCsrfToken,
   hasValidAuthorizationHeader,
-  requestHasValidSession,
 } from '../services/session.js';
 
 export async function createServer(ctx: ApiContext) {
@@ -33,6 +34,7 @@ export async function createServer(ctx: ApiContext) {
     '/api/auth/login',
     '/api/auth/logout',
     '/api/auth/session',
+    '/api/auth/bootstrap/exchange',
   ]);
   const isAllowedOrigin = (origin: string | undefined): boolean => {
     if (!origin) {
@@ -87,7 +89,8 @@ export async function createServer(ctx: ApiContext) {
       request.headers.authorization,
       ctx.config.apiAuthToken,
     );
-    const hasSession = requestHasValidSession(request, ctx.config);
+    const session = getSessionFromRequest(request, ctx.config);
+    const hasSession = session !== null;
 
     if (!hasBearerToken && !hasSession) {
       reply.code(401).send({
@@ -102,6 +105,14 @@ export async function createServer(ctx: ApiContext) {
       reply.code(403).send({
         error: 'Forbidden',
         message: 'Cookie-authenticated writes require a trusted Origin header',
+      });
+      return;
+    }
+
+    if (hasSession && !hasBearerToken && mutatesState && !hasValidCsrfToken(request, session)) {
+      reply.code(403).send({
+        error: 'Forbidden',
+        message: 'Cookie-authenticated writes require a valid CSRF token',
       });
       return;
     }

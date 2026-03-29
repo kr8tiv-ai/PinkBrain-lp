@@ -1,7 +1,9 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
+  ClipboardPaste,
+  Eraser,
   LockKeyhole,
   Radio,
   ShieldCheck,
@@ -10,6 +12,7 @@ import {
 import { useLogin, useLiveness } from '../../api/auth';
 import { ApiError } from '../../api/client';
 import { useBagsAuth } from '../../hooks/useBagsAuth';
+import { pushToast } from '../../hooks/useToast';
 import { Button } from '../common/Button';
 import { Card } from '../common/Card';
 
@@ -27,14 +30,68 @@ function getLoginErrorMessage(error: unknown): string {
 
 export function LoginGate() {
   const [token, setToken] = useState('');
+  const [isPasting, setIsPasting] = useState(false);
   const login = useLogin();
   const liveness = useLiveness();
   const bagsAuth = useBagsAuth();
+  const hasConsumedUrlToken = useRef(false);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    login.mutate(token.trim());
+    login.mutate(token.trim(), {
+      onSuccess: () => {
+        setToken('');
+      },
+    });
   };
+
+  const handlePasteFromClipboard = async () => {
+    if (!navigator.clipboard?.readText) {
+      pushToast('error', 'Clipboard access is unavailable in this browser context.');
+      return;
+    }
+
+    setIsPasting(true);
+    try {
+      const nextToken = (await navigator.clipboard.readText()).trim();
+      if (!nextToken) {
+        pushToast('info', 'Clipboard is empty. Copy the operator token and try again.');
+        return;
+      }
+
+      setToken(nextToken);
+      pushToast('success', 'Token pasted from clipboard');
+    } catch (error) {
+      pushToast(
+        'error',
+        error instanceof Error ? error.message : 'Unable to read from the clipboard.',
+      );
+    } finally {
+      setIsPasting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (hasConsumedUrlToken.current || login.isPending) {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    const bootstrapToken = url.searchParams.get('bootstrap')?.trim();
+    if (!bootstrapToken) {
+      return;
+    }
+
+    hasConsumedUrlToken.current = true;
+    setToken(bootstrapToken);
+    login.mutate(bootstrapToken, {
+      onSuccess: () => {
+        setToken('');
+        url.searchParams.delete('bootstrap');
+        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+      },
+    });
+  }, [login]);
 
   return (
     <div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(236,72,153,0.18),_transparent_35%),radial-gradient(circle_at_80%_20%,_rgba(56,189,248,0.18),_transparent_25%),linear-gradient(180deg,_#070b14,_#04060b_55%,_#020308)] text-white">
@@ -106,6 +163,11 @@ export function LoginGate() {
                 Wallet bridge note: {bagsAuth.error}
               </p>
             )}
+            {liveness.isError && (
+              <p className="mt-3 text-xs text-orange-200/90">
+                Backend liveness could not be confirmed. You can still try signing in, but verify the API host if this persists.
+              </p>
+            )}
           </div>
         </section>
 
@@ -115,24 +177,55 @@ export function LoginGate() {
               <p className="text-xs uppercase tracking-[0.28em] text-pink-200/80">Operator Access</p>
               <h2 className="mt-2 text-2xl font-semibold text-white">Unlock the dashboard</h2>
               <p className="mt-2 text-sm leading-6 text-slate-300">
-                Paste the backend operator token once. PinkBrain will convert it into a secure session cookie and immediately stop relying on the raw secret in the browser.
+                Paste a short-lived bootstrap token once. PinkBrain will exchange it for a secure session cookie without ever needing the long-lived backend operator secret in the browser.
               </p>
             </div>
 
             <form className="space-y-5 px-6 py-6" onSubmit={handleSubmit}>
               <label className="block space-y-2">
                 <span className="text-xs font-medium uppercase tracking-[0.22em] text-slate-400">
-                  Backend Operator Token
+                  Operator Bootstrap Token
                 </span>
                 <textarea
                   value={token}
                   onChange={(event) => setToken(event.target.value)}
                   rows={4}
                   spellCheck={false}
-                  placeholder="Paste API_AUTH_TOKEN"
+                  autoFocus
+                  placeholder="Paste bootstrap token"
                   className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 font-mono text-sm text-white outline-none transition focus:border-pink-400/60 focus:ring-2 focus:ring-pink-400/20"
                 />
               </label>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3">
+                <p className="text-xs leading-6 text-slate-300">
+                  Paste once, exchange it for a secure cookie, then let the browser forget the bootstrap token.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void handlePasteFromClipboard()}
+                    disabled={isPasting}
+                    className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
+                  >
+                    <ClipboardPaste className="h-4 w-4" />
+                    {isPasting ? 'Reading clipboard...' : 'Paste from clipboard'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setToken('')}
+                    disabled={!token.trim() || login.isPending}
+                    className="rounded-xl text-slate-300 hover:bg-white/10 hover:text-white"
+                  >
+                    <Eraser className="h-4 w-4" />
+                    Clear token
+                  </Button>
+                </div>
+              </div>
 
               {login.isError && (
                 <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-100">
@@ -151,9 +244,9 @@ export function LoginGate() {
                 type="submit"
                 size="lg"
                 className="w-full justify-center rounded-2xl bg-gradient-to-r from-pink-600 via-fuchsia-500 to-cyan-500 text-white hover:from-pink-500 hover:via-fuchsia-400 hover:to-cyan-400"
-                disabled={!token.trim() || login.isPending}
+                disabled={!token.trim() || login.isPending || isPasting}
               >
-                {login.isPending ? 'Exchanging token…' : 'Start Secure Session'}
+                {login.isPending ? 'Exchanging token...' : 'Start Secure Session'}
               </Button>
             </form>
           </Card>

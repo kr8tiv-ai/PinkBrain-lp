@@ -105,7 +105,18 @@ LOG_LEVEL=info
 
 ### Frontend Sign-In
 
-The React dashboard now exchanges `API_AUTH_TOKEN` for a signed HttpOnly session cookie via `POST /api/auth/login`. The browser can call protected routes without keeping the raw operator token in React state or local storage.
+The preferred operator path is now:
+
+1. Mint a short-lived bootstrap token on a trusted machine:
+
+```bash
+npm run bootstrap-token -w backend -- --frontend-url http://localhost:5173
+```
+
+2. Open the generated link or paste the bootstrap token into the React dashboard.
+3. The frontend exchanges that token for a signed HttpOnly session cookie via `POST /api/auth/bootstrap/exchange`.
+
+The browser never needs the long-lived `API_AUTH_TOKEN`, and cookie-authenticated writes also require a matching CSRF header plus a trusted `Origin`.
 
 Public health surface:
 
@@ -150,8 +161,8 @@ Protected operational surface:
 |----------|--------|-----|
 | LP Protocol | **DAMM v2** over DLMM | Only protocol supporting permanent lock + fee claims |
 | Swaps | **Bags API** | Platform fee compliance (required by Bags ecosystem) |
-| Operator Auth | **HttpOnly session + bearer login** | Browser-safe control plane without exposing the raw backend token after sign-in |
-| Signing | **Dedicated signer key** | Break-glass Bags Agent export is disabled by default |
+| Operator Auth | **HttpOnly session + bootstrap exchange** | Short-lived browser bootstrap tokens avoid exposing the long-lived backend secret |
+| Signing | **Remote signer boundary** | Main backend can run without local long-lived key material; break-glass export stays disabled by default |
 | RPC | **Helius** | Priority fees, DAS API for holder snapshots |
 | Storage | **SQLite** (hackathon) | Simple, zero-config; PostgreSQL planned for production |
 
@@ -215,6 +226,30 @@ npm run build          # TypeScript compile
 npm run lint           # ESLint
 ```
 
+### Remote Signer
+
+Preferred production posture:
+
+```bash
+npm run remote-signer -w backend
+```
+
+Point the main backend at that isolated signer process with:
+
+```env
+REMOTE_SIGNER_URL=https://remote-signer.internal
+REMOTE_SIGNER_AUTH_TOKEN=change_me
+```
+
+The remote signer speaks a narrow `/sign-and-send` contract, so the main backend never needs to load the long-lived signing key.
+
+Additional operator documentation:
+
+- `docs/runbook.md`
+- `docs/dependency-audit.md`
+- `docs/operations/remote-signer.md`
+- `docs/operations/secret-rotation.md`
+
 ### Break-Glass Bags Agent Export
 
 PinkBrain still supports exporting a Bags Agent wallet only as an explicit fallback:
@@ -238,7 +273,7 @@ You must also set `ALLOW_AGENT_WALLET_EXPORT=true` before the backend will accep
 | **1. Foundation** | SDK integration, 3 API clients, POC cycle | Complete |
 | **2. Core Engine** | Strategy persistence, orchestrator state machine, scheduler, distribution | Complete |
 | **3. UI** | React frontend for Bags App Store -- strategy CRUD, run history, controls | Complete |
-| **4. Hardening** | Session auth, origin checks, bigint-safe distribution, blockhash-safe confirms | Complete |
+| **4. Hardening** | Bootstrap auth, CSRF, bigint-safe distribution, blockhash-safe confirms, remote signer path | Complete |
 
 ---
 

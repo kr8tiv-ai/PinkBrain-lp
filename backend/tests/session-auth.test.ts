@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Connection } from '@solana/web3.js';
 import type { Config } from '../src/config/index.js';
 import { createServer } from '../src/api/server.js';
+import { createBootstrapToken } from '../src/services/bootstrapAuth.js';
 import { Database } from '../src/services/Database.js';
 import { HealthService } from '../src/services/HealthService.js';
 
@@ -22,6 +23,9 @@ function createConfig(overrides?: Partial<Config>): Config {
     feeThresholdSol: 7,
     apiAuthToken: 'api-token',
     corsOrigins: ['http://localhost:5173'],
+    bootstrapTokenSecret: 'bootstrap-secret',
+    bootstrapTokenTtlMinutes: 10,
+    allowBrowserOperatorTokenLogin: false,
     bagsAgentUsername: '',
     bagsAgentJwt: '',
     bagsAgentWalletAddress: '',
@@ -155,9 +159,27 @@ describe('session auth and public/private health endpoints', () => {
       payload: { token: 'api-token' },
     });
 
+    expect(login.statusCode).toBe(403);
+    await app.close();
+  });
+
+  it('creates a browser session by exchanging a bootstrap token', async () => {
+    const { app, config } = await createTestApp();
+    const bootstrapToken = createBootstrapToken(config);
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/bootstrap/exchange',
+      payload: { bootstrapToken },
+    });
+
     expect(login.statusCode).toBe(200);
     const cookie = login.headers['set-cookie'];
     expect(cookie).toBeTruthy();
+    expect(login.json()).toMatchObject({
+      authenticated: true,
+      csrfToken: expect.any(String),
+    });
 
     const readiness = await app.inject({
       method: 'GET',
@@ -174,7 +196,7 @@ describe('session auth and public/private health endpoints', () => {
   });
 
   it('reports browser session state without requiring auth', async () => {
-    const { app } = await createTestApp();
+    const { app, config } = await createTestApp();
 
     const before = await app.inject({
       method: 'GET',
@@ -185,8 +207,8 @@ describe('session auth and public/private health endpoints', () => {
 
     const login = await app.inject({
       method: 'POST',
-      url: '/api/auth/login',
-      payload: { token: 'api-token' },
+      url: '/api/auth/bootstrap/exchange',
+      payload: { bootstrapToken: createBootstrapToken(config) },
     });
     const cookie = login.headers['set-cookie'];
 
@@ -198,20 +220,24 @@ describe('session auth and public/private health endpoints', () => {
       },
     });
     expect(after.statusCode).toBe(200);
-    expect(after.json()).toEqual({ authenticated: true });
+    expect(after.json()).toMatchObject({
+      authenticated: true,
+      csrfToken: expect.any(String),
+    });
 
     await app.close();
   });
 
-  it('rejects cookie-authenticated state changes without an allowed origin', async () => {
-    const { app } = await createTestApp();
+  it('rejects cookie-authenticated state changes without an allowed origin or csrf token', async () => {
+    const { app, config } = await createTestApp();
 
     const login = await app.inject({
       method: 'POST',
-      url: '/api/auth/login',
-      payload: { token: 'api-token' },
+      url: '/api/auth/bootstrap/exchange',
+      payload: { bootstrapToken: createBootstrapToken(config) },
     });
     const cookie = login.headers['set-cookie'];
+    const csrfToken = login.json().csrfToken as string;
 
     const blocked = await app.inject({
       method: 'POST',
@@ -222,7 +248,7 @@ describe('session auth and public/private health endpoints', () => {
     });
     expect(blocked.statusCode).toBe(403);
 
-    const allowed = await app.inject({
+    const missingCsrf = await app.inject({
       method: 'POST',
       url: '/api/strategies/test-strategy-id/run',
       headers: {
@@ -230,18 +256,29 @@ describe('session auth and public/private health endpoints', () => {
         origin: 'http://localhost:5173',
       },
     });
+    expect(missingCsrf.statusCode).toBe(403);
+
+    const allowed = await app.inject({
+      method: 'POST',
+      url: '/api/strategies/test-strategy-id/run',
+      headers: {
+        cookie: Array.isArray(cookie) ? cookie[0] : cookie,
+        origin: 'http://localhost:5173',
+        'x-csrf-token': csrfToken,
+      },
+    });
     expect(allowed.statusCode).toBe(200);
 
     await app.close();
   });
 
-  it('rejects invalid login attempts', async () => {
+  it('rejects invalid bootstrap token exchange attempts', async () => {
     const { app } = await createTestApp();
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/auth/login',
-      payload: { token: 'wrong-token' },
+      url: '/api/auth/bootstrap/exchange',
+      payload: { bootstrapToken: 'wrong-token' },
     });
 
     expect(response.statusCode).toBe(401);

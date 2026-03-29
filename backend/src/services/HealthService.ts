@@ -25,7 +25,7 @@ export interface ReadinessSnapshot {
     };
     signer: {
       status: 'configured' | 'not-required' | 'missing';
-      source: 'private-key' | 'bags-agent' | 'none';
+      source: 'remote-signer' | 'private-key' | 'bags-agent' | 'none';
     };
   };
 }
@@ -41,7 +41,7 @@ export class HealthService {
     private readonly db: Database,
     private readonly config: Config,
     private readonly runtime: {
-      signerSource: 'private-key' | 'bags-agent' | 'none';
+      signerSource: 'remote-signer' | 'private-key' | 'bags-agent' | 'none';
       resolvedAgentWalletAddress?: string | null;
     } = { signerSource: 'none', resolvedAgentWalletAddress: null },
   ) {}
@@ -57,6 +57,8 @@ export class HealthService {
     const signerSource =
       this.runtime.signerSource !== 'none'
         ? this.runtime.signerSource
+        : this.config.remoteSignerUrl
+          ? 'remote-signer'
         : this.config.signerPrivateKey
           ? 'private-key'
           : 'none';

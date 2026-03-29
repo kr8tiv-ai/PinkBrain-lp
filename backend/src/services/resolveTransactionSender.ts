@@ -3,10 +3,11 @@ import type { Config } from '../config/index.js';
 import type { TransactionSender } from '../engine/types.js';
 import type { BagsAgentClient } from '../clients/BagsAgentClient.js';
 import { createKeypairTransactionSender } from './KeypairTransactionSender.js';
+import { createRemoteTransactionSender } from './RemoteTransactionSender.js';
 
 export interface ResolveTransactionSenderResult {
   sender: TransactionSender;
-  source: 'private-key' | 'bags-agent' | 'none';
+  source: 'remote-signer' | 'private-key' | 'bags-agent' | 'none';
   resolvedWalletAddress: string | null;
 }
 
@@ -15,6 +16,14 @@ export async function resolveTransactionSender(
   connection: Connection,
   agentClient: BagsAgentClient,
 ): Promise<ResolveTransactionSenderResult> {
+  if (config.remoteSignerUrl) {
+    return {
+      sender: createRemoteTransactionSender(config),
+      source: 'remote-signer',
+      resolvedWalletAddress: null,
+    };
+  }
+
   if (config.signerPrivateKey) {
     return {
       sender: createKeypairTransactionSender({
@@ -50,7 +59,7 @@ export async function resolveTransactionSender(
     sender: {
       signAndSendTransaction: async () => {
         throw new Error(
-          'No transaction signer configured. Set SIGNER_PRIVATE_KEY or explicitly enable the break-glass Bags agent export path.',
+          'No transaction signer configured. Set REMOTE_SIGNER_URL, SIGNER_PRIVATE_KEY, or explicitly enable the break-glass Bags agent export path.',
         );
       },
     },

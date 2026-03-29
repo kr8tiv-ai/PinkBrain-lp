@@ -30,6 +30,9 @@ export interface Config {
   corsOrigins: string[];
   sessionSecret: string;
   sessionTtlHours: number;
+  bootstrapTokenSecret: string;
+  bootstrapTokenTtlMinutes: number;
+  allowBrowserOperatorTokenLogin: boolean;
 
   // Bags Agent auth
   bagsAgentUsername: string;
@@ -39,6 +42,9 @@ export interface Config {
 
   // Signing
   signerPrivateKey: string;
+  remoteSignerUrl: string;
+  remoteSignerAuthToken: string;
+  remoteSignerTimeoutMs: number;
 
   // Runtime execution policy
   dryRun: boolean;
@@ -120,6 +126,9 @@ export function loadConfig(): Config {
     corsOrigins,
     sessionSecret: getEnv('SESSION_SECRET', getEnv('API_AUTH_TOKEN', '')),
     sessionTtlHours: getEnvNumber('SESSION_TTL_HOURS', 12),
+    bootstrapTokenSecret: getEnv('BOOTSTRAP_TOKEN_SECRET', getEnv('SESSION_SECRET', getEnv('API_AUTH_TOKEN', ''))),
+    bootstrapTokenTtlMinutes: getEnvNumber('BOOTSTRAP_TOKEN_TTL_MINUTES', 10),
+    allowBrowserOperatorTokenLogin: getEnvBoolean('ALLOW_BROWSER_OPERATOR_TOKEN_LOGIN', false),
 
     // Bags Agent auth
     bagsAgentUsername: getEnv('BAGS_AGENT_USERNAME', ''),
@@ -129,6 +138,9 @@ export function loadConfig(): Config {
 
     // Signing
     signerPrivateKey: getEnv('SIGNER_PRIVATE_KEY', ''),
+    remoteSignerUrl: getEnv('REMOTE_SIGNER_URL', ''),
+    remoteSignerAuthToken: getEnv('REMOTE_SIGNER_AUTH_TOKEN', ''),
+    remoteSignerTimeoutMs: getEnvNumber('REMOTE_SIGNER_TIMEOUT_MS', 10000),
 
     // Runtime execution policy
     dryRun: getEnvBoolean('DRY_RUN', false),

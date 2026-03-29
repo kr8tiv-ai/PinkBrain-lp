@@ -1,13 +1,15 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Config } from '../config/index.js';
 
 const SESSION_COOKIE_NAME = 'pinkbrain_session';
+const CSRF_HEADER_NAME = 'x-csrf-token';
 
-interface SessionPayload {
+export interface SessionPayload {
   v: 1;
   iat: number;
   exp: number;
+  csrf: string;
 }
 
 function toBase64Url(value: string): string {
@@ -49,6 +51,10 @@ export function getSessionCookieName(): string {
   return SESSION_COOKIE_NAME;
 }
 
+export function getCsrfHeaderName(): string {
+  return CSRF_HEADER_NAME;
+}
+
 export function isValidOperatorToken(expectedToken: string, providedToken: string): boolean {
   if (!expectedToken || !providedToken) {
     return false;
@@ -67,45 +73,82 @@ export function hasValidAuthorizationHeader(
   return paddedTimingSafeEqual(authorizationHeader, `Bearer ${expectedToken}`);
 }
 
-export function createSessionToken(config: Config): string {
+export function createSessionToken(config: Config): { token: string; csrfToken: string } {
   const issuedAtSeconds = Math.floor(Date.now() / 1000);
+  const csrfToken = randomBytes(24).toString('base64url');
   const payload: SessionPayload = {
     v: 1,
     iat: issuedAtSeconds,
     exp: issuedAtSeconds + (config.sessionTtlHours * 60 * 60),
+    csrf: csrfToken,
   };
   const encodedPayload = toBase64Url(JSON.stringify(payload));
   const signature = signValue(encodedPayload, config.sessionSecret);
-  return `${encodedPayload}.${signature}`;
+  return {
+    token: `${encodedPayload}.${signature}`,
+    csrfToken,
+  };
 }
 
-export function verifySessionToken(token: string | undefined, config: Config): boolean {
+export function verifySessionToken(
+  token: string | undefined,
+  config: Pick<Config, 'sessionSecret'>,
+): SessionPayload | null {
   if (!token || !config.sessionSecret) {
-    return false;
+    return null;
   }
 
   const [encodedPayload, signature] = token.split('.');
   if (!encodedPayload || !signature) {
-    return false;
+    return null;
   }
 
   const expectedSignature = signValue(encodedPayload, config.sessionSecret);
   if (!paddedTimingSafeEqual(signature, expectedSignature)) {
-    return false;
+    return null;
   }
 
   try {
     const payload = JSON.parse(fromBase64Url(encodedPayload)) as SessionPayload;
-    if (payload.v !== 1) return false;
-    return payload.exp > Math.floor(Date.now() / 1000);
+    if (payload.v !== 1 || !payload.csrf) {
+      return null;
+    }
+    if (payload.exp <= Math.floor(Date.now() / 1000)) {
+      return null;
+    }
+    return payload;
   } catch {
-    return false;
+    return null;
   }
 }
 
-export function requestHasValidSession(request: FastifyRequest, config: Config): boolean {
+export function getSessionFromRequest(
+  request: FastifyRequest,
+  config: Pick<Config, 'sessionSecret'>,
+): SessionPayload | null {
   const cookies = parseCookies(request.headers.cookie);
   return verifySessionToken(cookies[SESSION_COOKIE_NAME], config);
+}
+
+export function requestHasValidSession(request: FastifyRequest, config: Pick<Config, 'sessionSecret'>): boolean {
+  return getSessionFromRequest(request, config) !== null;
+}
+
+export function hasValidCsrfToken(
+  request: FastifyRequest,
+  session: SessionPayload | null,
+): boolean {
+  if (!session) {
+    return false;
+  }
+
+  const headerValue = request.headers[CSRF_HEADER_NAME];
+  const candidate = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  if (!candidate) {
+    return false;
+  }
+
+  return paddedTimingSafeEqual(candidate, session.csrf);
 }
 
 export function setSessionCookie(reply: FastifyReply, token: string, config: Config): void {

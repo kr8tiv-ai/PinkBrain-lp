@@ -1,18 +1,29 @@
 # PinkBrain LP Operator Runbook
 
-This runbook captures the safest known operating path for PinkBrain LP after the March 28, 2026 hardening pass.
+This runbook captures the preferred operating model after the March 28, 2026 hardening passes.
 
 ## 1. Operator Access Model
 
-- The frontend no longer needs to hold the raw backend bearer token after sign-in.
-- Operators authenticate by POSTing `API_AUTH_TOKEN` to `/api/auth/login`.
-- The backend returns a signed HttpOnly session cookie.
-- Cookie-authenticated write requests now require a trusted `Origin` header.
+Preferred browser sign-in flow:
+
+1. Mint a short-lived bootstrap token on a trusted machine:
+
+```powershell
+npm run bootstrap-token -w backend -- --frontend-url https://pinkbrain.example.com
+```
+
+2. Open the generated link or paste the bootstrap token into the dashboard.
+3. The frontend exchanges the bootstrap token for a signed HttpOnly session cookie.
+4. Cookie-authenticated write requests must also send:
+   - a trusted `Origin`
+   - a matching `X-CSRF-Token`
+
+Legacy browser login with `API_AUTH_TOKEN` is disabled by default and should stay disabled outside local debugging.
 
 Public endpoints:
 
 - `GET /api/liveness`
-- `GET /api/health` (legacy alias of liveness)
+- `GET /api/health`
 - `GET /api/auth/session`
 
 Protected endpoints:
@@ -22,22 +33,41 @@ Protected endpoints:
 - strategy CRUD / pause / resume / run
 - run detail / logs / resume
 
-## 2. Required Environment
+## 2. Preferred Signing Topology
 
-Minimum secure setup:
+Preferred production posture:
+
+- Run the compounding backend without `SIGNER_PRIVATE_KEY`.
+- Run `npm run remote-signer -w backend` on an isolated host or private network segment.
+- Configure the main backend with:
+  - `REMOTE_SIGNER_URL`
+  - `REMOTE_SIGNER_AUTH_TOKEN`
+- Keep the long-lived private key only on the remote signer host.
+
+Break-glass fallback:
+
+- `SIGNER_PRIVATE_KEY` on the main backend only for short-lived emergency operation.
+- Bags Agent wallet export only when both:
+  - `ALLOW_AGENT_WALLET_EXPORT=true`
+  - explicit CLI acknowledgement flag is provided
+
+## 3. Required Environment
+
+Minimum secure backend:
 
 - `BAGS_API_KEY`
 - `HELIUS_API_KEY` or `HELIUS_RPC_URL`
 - `API_AUTH_TOKEN`
 - `SESSION_SECRET`
-- `SIGNER_PRIVATE_KEY`
+- `BOOTSTRAP_TOKEN_SECRET`
+- `REMOTE_SIGNER_URL`
+- `REMOTE_SIGNER_AUTH_TOKEN`
 
-Optional agent-auth values:
+Remote signer host:
 
-- `BAGS_AGENT_USERNAME`
-- `BAGS_AGENT_JWT`
-- `BAGS_AGENT_WALLET_ADDRESS`
-- `ALLOW_AGENT_WALLET_EXPORT=true` only when intentionally enabling the break-glass export path
+- `REMOTE_SIGNER_PRIVATE_KEY`
+- `REMOTE_SIGNER_AUTH_TOKEN`
+- `REMOTE_SIGNER_RPC_URL` or inherited Solana RPC config
 
 Runtime safety toggles:
 
@@ -46,106 +76,80 @@ Runtime safety toggles:
 - `MAX_DAILY_RUNS`
 - `MAX_CLAIMABLE_SOL_PER_RUN`
 
-## 3. Preferred Signer Posture
-
-Preferred:
-
-- Provide `SIGNER_PRIVATE_KEY` from a secure secret manager or deployment secret store.
-
-Break-glass fallback:
-
-- Authenticate a Bags Agent.
-- Export the wallet only intentionally.
-- Set `ALLOW_AGENT_WALLET_EXPORT=true`.
-
-Break-glass export command:
-
-```powershell
-npm run agent -w backend -- wallet export `
-  --token <jwt> `
-  --wallet <wallet_address> `
-  --i-understand-this-exports-a-private-key `
-  --env
-```
-
-The CLI refuses to export unless the acknowledgement flag is present.
-
-## 4. Verification Before Deploying
-
-Run from repo root:
-
-```powershell
-npm ci
-npm run verify
-npm audit --audit-level=high
-```
-
-If any of these fail, stop and fix the issue before deployment.
-
-## 5. Safe Bring-Up Sequence
+## 4. Safe Bring-Up Sequence
 
 1. Set `DRY_RUN=true`.
 2. Set `EXECUTION_KILL_SWITCH=false`.
-3. Start the backend: `npm run backend`
-4. Start the frontend: `npm run frontend`
-5. Confirm `GET /api/liveness` returns `status: "ok"`.
-6. Sign into the frontend with `API_AUTH_TOKEN`.
-7. Confirm `GET /api/readiness` is healthy or degraded only for understood reasons.
-8. Trigger one manual dry run.
-9. Review run logs.
-10. Only then disable dry-run.
+3. Start the remote signer.
+4. Start the backend: `npm run backend`
+5. Start the frontend: `npm run frontend`
+6. Confirm `GET /api/liveness` returns `status: "ok"`.
+7. Confirm `GET /api/readiness` reports signer source `remote-signer`.
+8. Mint a bootstrap token and sign into the frontend.
+9. Trigger one manual dry run.
+10. Review run logs and audit log entries.
+11. Only then disable dry-run.
 
-## 6. Health Interpretation
+## 5. CSRF and Session Expectations
 
-Use `GET /api/liveness` for:
+Cookie-authenticated writes are rejected unless all of the following are true:
 
-- uptime
-- process reachability
-- load balancer health checks
+- session cookie is valid
+- `Origin` is allowlisted
+- `X-CSRF-Token` matches the signed session payload
 
-Use `GET /api/readiness` for:
+Direct bearer-token automation is still allowed for trusted server-to-server callers and does not require CSRF.
 
-- signer state
-- Bags API rate-limit/circuit-breaker details
-- scheduler count
-- runtime execution mode
-- dependency checks
+## 6. Key Rotation Drill
 
-## 7. Kill Switch Procedure
+Rotate these independently:
 
-If anything looks unsafe:
+- `API_AUTH_TOKEN`
+- `SESSION_SECRET`
+- `BOOTSTRAP_TOKEN_SECRET`
+- `REMOTE_SIGNER_AUTH_TOKEN`
+- remote signer private key
+
+Recommended drill:
+
+1. Enable `DRY_RUN=true`.
+2. Pause manual operator activity.
+3. Rotate `REMOTE_SIGNER_AUTH_TOKEN` on both hosts.
+4. Rotate bootstrap/session secrets on the backend host.
+5. Mint a new bootstrap token and verify sign-in works.
+6. Rotate the remote signer private key if required.
+7. Trigger a dry-run manual execution.
+8. Review readiness, audit logs, and the last successful signature path.
+
+## 7. Incident Response
+
+If the operator secret or signer key may be compromised:
 
 1. Set `EXECUTION_KILL_SWITCH=true`.
-2. Restart the backend if needed.
-3. Confirm readiness shows `executionMode: "blocked"`.
-4. Investigate recent run logs before resuming.
+2. Stop the remote signer.
+3. Revoke or rotate:
+   - `API_AUTH_TOKEN`
+   - `SESSION_SECRET`
+   - `BOOTSTRAP_TOKEN_SECRET`
+   - `REMOTE_SIGNER_AUTH_TOKEN`
+   - remote signer private key
+4. Invalidate any outstanding bootstrap links by rotating `BOOTSTRAP_TOKEN_SECRET`.
+5. Restart services with fresh secrets.
+6. Re-verify with `npm run verify`.
+7. Resume only after a dry-run manual cycle succeeds.
 
-Use the kill switch for:
+## 8. Deployment Hardening Notes
 
-- signer issues
-- anomalous claim amounts
-- Bags API instability
-- suspicious swap quotes
-- uncertain Meteora state
+- Keep the remote signer on a private interface whenever possible.
+- Restrict `REMOTE_SIGNER_URL` traffic to the backend host or VPN.
+- Do not expose `REMOTE_SIGNER_PRIVATE_KEY` to CI or the frontend host.
+- Keep `ALLOW_BROWSER_OPERATOR_TOKEN_LOGIN=false`.
+- Keep `ALLOW_AGENT_WALLET_EXPORT=false` unless actively recovering.
+- Use `GET /api/liveness` for public health checks and keep `GET /api/readiness` behind auth.
 
-## 8. Recovery of Failed Runs
+## 9. Remaining External Unknowns
 
-Use:
-
-- `GET /api/runs`
-- `GET /api/runs/:id/logs`
-- `POST /api/runs/:id/resume`
-
-Recommended process:
-
-1. Inspect logs.
-2. Identify the failed phase.
-3. Keep `DRY_RUN=true` while validating the fix.
-4. Resume only after the root cause is understood.
-
-## 9. Notes on Missing Public Bags Docs
-
-Confirmed public docs exist for:
+Confirmed public Bags docs exist for:
 
 - claimable positions
 - claim transactions

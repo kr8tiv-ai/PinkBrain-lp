@@ -1,4 +1,5 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
+let csrfToken: string | null = null;
 
 export class ApiError extends Error {
   constructor(
@@ -12,8 +13,12 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
+  const method = init?.method ?? 'GET';
   if (init?.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
+  }
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && csrfToken && !headers.has('X-CSRF-Token')) {
+    headers.set('X-CSRF-Token', csrfToken);
   }
 
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -27,6 +32,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+export function setCsrfToken(nextToken: string | null) {
+  csrfToken = nextToken;
 }
 
 export const api = {

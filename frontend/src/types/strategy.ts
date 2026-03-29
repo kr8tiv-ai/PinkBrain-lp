@@ -133,13 +133,14 @@ export interface ReadinessSnapshot extends HealthSnapshot {
     };
     signer: {
       status: 'configured' | 'not-required' | 'missing';
-      source: 'private-key' | 'bags-agent' | 'none';
+      source: 'remote-signer' | 'private-key' | 'bags-agent' | 'none';
     };
   };
 }
 
 export interface SessionState {
   authenticated: boolean;
+  csrfToken?: string;
 }
 
 export interface LivenessSnapshot {
