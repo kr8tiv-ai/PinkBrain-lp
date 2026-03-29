@@ -94,6 +94,24 @@ export interface RuntimeSummary {
 export interface Stats {
   strategies: { total: number; active: number };
   runs: { total: number; completed: number; failed: number; successRate: number };
+  performance: {
+    averageDurationMs: number;
+    averageDurationSeconds: number;
+    lastSuccessfulRunAt: string | null;
+    lastFailedRunAt: string | null;
+    recentFailures24h: number;
+  };
+  valueFlow: {
+    totalClaimedLamports: string;
+    totalDistributedAmount: string;
+    totalLockedLiquidity: string;
+    totalRecipients: number;
+  };
+  transactions: {
+    recordedSignatures: number;
+    confirmedClaims: number;
+    runsWithOnchainActivity: number;
+  };
   scheduledJobs: number;
   runtime: RuntimeSummary;
 }

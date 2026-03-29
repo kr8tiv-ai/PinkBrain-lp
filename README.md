@@ -11,8 +11,11 @@
 [![Bags.fm](https://img.shields.io/badge/Bags.fm-Embedded_App_Store-FF6B9D?style=flat-square)](https://bags.fm/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+[![CI](https://github.com/kr8tiv-ai/PinkBrain-lp/actions/workflows/ci.yml/badge.svg)](https://github.com/kr8tiv-ai/PinkBrain-lp/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/kr8tiv-ai/PinkBrain-lp/actions/workflows/codeql.yml/badge.svg)](https://github.com/kr8tiv-ai/PinkBrain-lp/actions/workflows/codeql.yml)
+[![Secret Scan](https://github.com/kr8tiv-ai/PinkBrain-lp/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/kr8tiv-ai/PinkBrain-lp/actions/workflows/secret-scan.yml)
 
-[Overview](#overview) | [For Token Creators](#for-token-creators) | [Embedded Runtime](#embedded-runtime) | [Security Model](#security-model) | [Quick Start](#quick-start) | [Operations](#operations)
+[Overview](#overview) | [For Token Creators](#for-token-creators) | [Embedded Runtime](#embedded-runtime) | [Security Model](#security-model) | [API Surface](#api-surface) | [Quick Start](#quick-start) | [Operations](#operations)
 
 </div>
 
@@ -70,7 +73,7 @@ PinkBrain LP is meant to be usable by a token creator who wants durable liquidit
 - monitors claimable fee positions
 - runs the claim -> swap -> add liquidity -> permanent lock -> distribute pipeline
 - records run state, audit events, and operational health
-- surfaces next runs, recipient counts, lifetime claimed totals, and recent failures in the embedded UI
+- surfaces next runs, recipient counts, lifetime claimed totals, average run time, and recent failures in the embedded UI
 
 ## Embedded Runtime
 
@@ -231,6 +234,8 @@ Protected operational endpoints:
 - validation endpoints
 - strategy CRUD, run control, pause/resume, logs, and retry routes
 
+See [docs/api-reference.md](./docs/api-reference.md) for endpoint tables, auth expectations, and example payloads.
+
 ## Repository Structure
 
 ```text
@@ -261,6 +266,7 @@ Primary operational docs:
 
 - [docs/runbook.md](./docs/runbook.md)
 - [docs/deploy.md](./docs/deploy.md)
+- [docs/api-reference.md](./docs/api-reference.md)
 - [docs/dependency-audit.md](./docs/dependency-audit.md)
 - [docs/operations/remote-signer.md](./docs/operations/remote-signer.md)
 - [docs/operations/secret-rotation.md](./docs/operations/secret-rotation.md)

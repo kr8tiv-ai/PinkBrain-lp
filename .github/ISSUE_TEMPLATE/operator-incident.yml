@@ -1,0 +1,57 @@
+name: Operator incident
+description: Capture a live operational incident affecting execution, signer isolation, or strategy safety.
+title: "[Incident]: "
+labels:
+  - incident
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this only for active operational incidents that are safe to discuss in the repository. If there is any possibility of exposed secrets or signer compromise, follow `SECURITY.md` and avoid public disclosure.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Sev 1 - live funds or signer integrity at risk
+        - Sev 2 - execution blocked or repeated failures
+        - Sev 3 - degraded operator experience
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime mode
+      options:
+        - Embedded Bags App Store
+        - Standalone browser
+        - Backend only
+        - Remote signer only
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Describe which strategies, runs, or operators were affected.
+    validations:
+      required: true
+  - type: textarea
+    id: current-state
+    attributes:
+      label: Current state
+      description: Include kill-switch state, dry-run state, and whether the signer is still online.
+    validations:
+      required: true
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Mitigation already taken
+      description: List any pause, rotation, restart, or containment steps already applied.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Include run ids, transaction signatures, readiness output, and audit entries.
+    validations:
+      required: true

@@ -49,6 +49,24 @@ function createApiFetch(session: SessionState) {
       return createJsonResponse({
         strategies: { total: 0, active: 0 },
         runs: { total: 0, completed: 0, failed: 0, successRate: 0 },
+        performance: {
+          averageDurationMs: 0,
+          averageDurationSeconds: 0,
+          lastSuccessfulRunAt: null,
+          lastFailedRunAt: null,
+          recentFailures24h: 0,
+        },
+        valueFlow: {
+          totalClaimedLamports: '0',
+          totalDistributedAmount: '0',
+          totalLockedLiquidity: '0',
+          totalRecipients: 0,
+        },
+        transactions: {
+          recordedSignatures: 0,
+          confirmedClaims: 0,
+          runsWithOnchainActivity: 0,
+        },
         scheduledJobs: 0,
         runtime: {
           dryRun: false,
@@ -105,6 +123,24 @@ function createApiFetchWithStrategyInsights(session: SessionState) {
       return createJsonResponse({
         strategies: { total: 1, active: 1 },
         runs: { total: 2, completed: 1, failed: 1, successRate: 50 },
+        performance: {
+          averageDurationMs: 210000,
+          averageDurationSeconds: 210,
+          lastSuccessfulRunAt: '2026-03-28T00:05:00.000Z',
+          lastFailedRunAt: '2026-03-29T00:05:00.000Z',
+          recentFailures24h: 1,
+        },
+        valueFlow: {
+          totalClaimedLamports: '1500000000',
+          totalDistributedAmount: '300',
+          totalLockedLiquidity: '200',
+          totalRecipients: 1,
+        },
+        transactions: {
+          recordedSignatures: 4,
+          confirmedClaims: 1,
+          runsWithOnchainActivity: 1,
+        },
         scheduledJobs: 1,
         runtime: {
           dryRun: false,
@@ -268,7 +304,8 @@ describe('App auth flow', () => {
     await renderApp();
 
     expect(await screen.findByText(/lifetime claimed/i)).toBeTruthy();
-    expect(await screen.findByText(/1\.5000 sol/i)).toBeTruthy();
+    expect((await screen.findAllByText(/1\.5000 sol/i)).length).toBe(2);
+    expect(await screen.findByText(/^3m 30s$/i)).toBeTruthy();
     expect(await screen.findByText(/rpc_timeout/i)).toBeTruthy();
     expect(await screen.findByText(/next run/i)).toBeTruthy();
   });

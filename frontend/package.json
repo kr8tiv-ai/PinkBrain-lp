@@ -8,7 +8,7 @@
     "dev": "vite",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "node ../node_modules/eslint/bin/eslint.js src --ext .ts,.tsx",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },

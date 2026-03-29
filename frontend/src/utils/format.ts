@@ -59,6 +59,28 @@ export function formatDate(iso: string): string {
   });
 }
 
+/** Format a duration in milliseconds into a compact operator-friendly label. */
+export function formatDurationMs(durationMs: number): string {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    return 'n/a';
+  }
+
+  const totalSeconds = Math.round(durationMs / 1000);
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
 /** Build a Solscan transaction URL */
 export function txUrl(signature: string): string {
   return `https://solscan.io/tx/${signature}`;

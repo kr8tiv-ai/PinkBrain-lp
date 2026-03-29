@@ -1,0 +1,41 @@
+name: Feature request
+description: Propose a product or operator workflow improvement for PinkBrain LP.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What operator, creator, or protocol problem does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the behavior you want and where it should live.
+      placeholder: Add a strategy template button that pre-fills a common owner-only configuration for new operators.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Primary surface
+      options:
+        - Dashboard
+        - Strategy creation
+        - Strategy detail
+        - Backend API
+        - Scheduler and engine
+        - Deployment and operations docs
+    validations:
+      required: true
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Why this helps
+      description: Explain the trust, security, reliability, or operator-efficiency gain.
+    validations:
+      required: true

@@ -6,6 +6,7 @@ export function useStrategies() {
   return useQuery({
     queryKey: ['strategies'],
     queryFn: () => api.get<Strategy[]>('/api/strategies'),
+    staleTime: 15_000,
   });
 }
 
@@ -21,6 +22,7 @@ export function useStrategyInsights() {
   return useQuery({
     queryKey: ['strategies', 'insights'],
     queryFn: () => api.get<StrategyInsight[]>('/api/strategies/insights'),
+    staleTime: 15_000,
   });
 }
 

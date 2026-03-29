@@ -35,6 +35,10 @@ Protected endpoints:
 - strategy CRUD / pause / resume / run
 - run detail / logs / resume
 
+Reference:
+
+- `docs/api-reference.md`
+
 ## 2. Preferred Signing Topology
 
 Preferred production posture:
@@ -123,7 +127,49 @@ Recommended drill:
 7. Trigger a dry-run manual execution.
 8. Review readiness, audit logs, and the last successful signature path.
 
-## 7. Incident Response
+## 7. Testing and Validation
+
+Preferred verification sequence before shipping config changes or resuming live execution:
+
+1. Run repository verification:
+
+```powershell
+npm run verify
+npm run lint
+```
+
+2. Run the backend smoke test against the current environment wiring:
+
+```powershell
+npm run smoke -w backend
+```
+
+3. Mint a fresh bootstrap token and verify browser sign-in:
+
+```powershell
+npm run bootstrap-token -w backend -- --frontend-url https://pinkbrain.example.com
+```
+
+4. If you need an end-to-end proof cycle in a controlled environment, use the backend script directly:
+
+```powershell
+npm run script -w backend -- --dry-run
+```
+
+What the proof script validates:
+
+- fee-claim retrieval and threshold handling
+- swap execution path and quote checks
+- liquidity-add and permanent-lock execution flow
+- final proof output in `tx-signatures.md`
+
+Operational guidance:
+
+- keep `DRY_RUN=true` for rehearsals
+- reserve `--force` and live irreversible locking for controlled environments only
+- treat the proof script as an operator validation tool, not a replacement for the authenticated dashboard flow
+
+## 8. Incident Response
 
 If the operator secret or signer key may be compromised:
 
@@ -140,7 +186,7 @@ If the operator secret or signer key may be compromised:
 6. Re-verify with `npm run verify`.
 7. Resume only after a dry-run manual cycle succeeds.
 
-## 8. Deployment Hardening Notes
+## 9. Deployment Hardening Notes
 
 - Keep the remote signer on a private interface whenever possible.
 - Restrict `REMOTE_SIGNER_URL` traffic to the backend host or VPN.
@@ -149,7 +195,7 @@ If the operator secret or signer key may be compromised:
 - Keep `ALLOW_AGENT_WALLET_EXPORT=false` unless actively recovering.
 - Use `GET /api/liveness` for public health checks and keep `GET /api/readiness` behind auth.
 
-## 9. Remaining External Unknowns
+## 10. Remaining External Unknowns
 
 Confirmed public Bags docs exist for:
 

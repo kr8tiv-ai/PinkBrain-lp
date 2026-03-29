@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible problem in the embedded operator app, backend, or run pipeline.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for reproducible defects. If the issue may expose live funds, credentials, or signer custody, do not post it publicly. Use the reporting path in `SECURITY.md` instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of PinkBrain LP is affected?
+      options:
+        - Embedded frontend
+        - Backend API
+        - Scheduler and runs
+        - Remote signer
+        - Validation flow
+        - Deployment and infrastructure
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected instead.
+      placeholder: When I resumed a strategy, the dashboard stayed stale and the run never appeared in /api/runs.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: List the exact steps, inputs, and environment.
+      placeholder: |
+        1. Sign in with a bootstrap token
+        2. Open strategy abc123
+        3. Click Resume
+        4. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: strategy
+    attributes:
+      label: Strategy id
+      description: If applicable, include the strategy id.
+  - type: input
+    id: run
+    attributes:
+      label: Run id
+      description: If applicable, include the run id.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs and evidence
+      description: Include relevant API responses, audit log lines, and transaction signatures.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Note whether this was local, embedded staging, or production, plus browser and host origin if relevant.
+    validations:
+      required: true

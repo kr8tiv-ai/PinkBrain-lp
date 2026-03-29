@@ -23,7 +23,13 @@ import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 import { useBagsAuth } from '../hooks/useBagsAuth';
-import { truncateAddress, formatDate, formatInteger, formatSol } from '../utils/format';
+import {
+  truncateAddress,
+  formatDate,
+  formatDurationMs,
+  formatInteger,
+  formatSol,
+} from '../utils/format';
 import type { ReadinessSnapshot, StrategyInsight } from '../types/strategy';
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
@@ -115,11 +121,13 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       {stats && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           <StatCard label="Strategies" value={stats.strategies.total} />
           <StatCard label="Active" value={stats.strategies.active} />
           <StatCard label="Total Runs" value={stats.runs.total} />
           <StatCard label="Success Rate" value={`${stats.runs.successRate}%`} />
+          <StatCard label="Avg Run" value={formatDurationMs(stats.performance.averageDurationMs)} />
+          <StatCard label="Claimed" value={`${formatSol(stats.valueFlow.totalClaimedLamports)} SOL`} />
         </div>
       )}
 

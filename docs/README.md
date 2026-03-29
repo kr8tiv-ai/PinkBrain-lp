@@ -8,6 +8,7 @@ Public documentation in this repository is organized around operation, deploymen
 - [../PRD.md](../PRD.md): product requirements and current implementation scope
 - [runbook.md](./runbook.md): day-to-day operator workflow and incident response
 - [deploy.md](./deploy.md): embedded deployment topologies and environment expectations
+- [api-reference.md](./api-reference.md): operator-facing REST surface, auth model, and example payloads
 - [known-risks.md](./known-risks.md): upstream dependency posture and external unknowns
 
 ## Operations
