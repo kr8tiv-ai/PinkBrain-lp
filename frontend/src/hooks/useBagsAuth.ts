@@ -1,12 +1,14 @@
 /**
- * Bags Agent auth bridge.
+ * Optional Bags context bridge.
  *
- * Detects whether the app is running inside the Bags App Store iframe.
- * If so, communicates with the parent frame for wallet access and tx signing.
- * Falls back to manual wallet input when running standalone.
+ * Detects whether the app may be running inside a Bags iframe and, when available,
+ * exposes wallet context through an injected bridge or an origin-scoped postMessage proxy.
+ *
+ * This hook is not the primary auth or signing path for PinkBrain LP. Transaction
+ * execution remains server-side and the UI must still work when no Bags bridge exists.
  */
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 interface BagsAgent {
   getWalletAddress(): Promise<string>;
@@ -21,7 +23,7 @@ interface BagsAuthState {
   error: string | null;
 }
 
-/** Check if we're inside an iframe (likely Bags App Store) */
+/** Check if we're inside an iframe that may be hosting the embedded app. */
 function isInIframe(): boolean {
   try {
     return window.self !== window.top;
@@ -48,30 +50,29 @@ function getParentOrigin(): string | null {
 }
 
 /**
- * Create a Bags Agent proxy that communicates via postMessage.
- * When the Bags platform injects `window.bagsAgent`, use that directly.
+ * Create a Bags context proxy that communicates via postMessage.
+ * If the host injects `window.bagsAgent`, prefer that bridge directly.
  */
 function createBagsProxy(): BagsAgent | null {
-  // Check for injected global (trusted — Bags platform injects this)
-  const injected = (window as any).bagsAgent;
-  if (injected && typeof injected.getWalletAddress === 'function') {
-    console.warn('[useBagsAuth] Using injected window.bagsAgent — trust assumption: Bags platform context');
+  const injected = (window as { bagsAgent?: unknown }).bagsAgent;
+  if (injected && typeof (injected as BagsAgent).getWalletAddress === 'function') {
+    console.warn('[useBagsAuth] Using injected window.bagsAgent for optional wallet context.');
     return injected as BagsAgent;
   }
 
-  // postMessage-based fallback
+  // postMessage-based fallback for iframe-hosted wallet context
   if (!isInIframe()) return null;
 
   const targetOrigin = getParentOrigin();
 
-  // Require explicit origin — never send postMessage to '*' in iframe mode
+  // Require explicit origin. Never send postMessage to '*' in iframe mode.
   if (!targetOrigin) {
     console.warn('[useBagsAuth] No parent origin configured (set VITE_BAGS_PARENT_ORIGIN). Refusing postMessage to *.');
     return null;
   }
 
   let messageId = 0;
-  const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+  const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 
   const onMessage = (event: MessageEvent) => {
     if (event.origin !== targetOrigin) {
@@ -92,7 +93,7 @@ function createBagsProxy(): BagsAgent | null {
 
   window.addEventListener('message', onMessage);
 
-  function rpc(method: string, params?: unknown): Promise<any> {
+  function rpc(method: string, params?: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const id = ++messageId;
       pending.set(id, { resolve, reject });
@@ -100,7 +101,7 @@ function createBagsProxy(): BagsAgent | null {
         { type: 'bags:request', id, method, params },
         targetOrigin!,
       );
-      // Timeout after 30 seconds
+
       setTimeout(() => {
         if (pending.has(id)) {
           pending.delete(id);
@@ -111,8 +112,9 @@ function createBagsProxy(): BagsAgent | null {
   }
 
   return {
-    getWalletAddress: () => rpc('getWalletAddress'),
-    signAndSendTransaction: (tx: string) => rpc('signAndSendTransaction', { tx }),
+    getWalletAddress: () => rpc('getWalletAddress') as Promise<string>,
+    signAndSendTransaction: (tx: string) =>
+      rpc('signAndSendTransaction', { tx }) as Promise<{ signature: string }>,
   };
 }
 

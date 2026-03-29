@@ -1,7 +1,7 @@
 {
   "name": "@pinkbrain-lp/frontend",
   "version": "0.1.0",
-  "description": "PinkBrain LP Frontend - Bags App Store UI",
+  "description": "PinkBrain LP Frontend - operator dashboard with optional Bags embed support",
   "private": true,
   "type": "module",
   "scripts": {

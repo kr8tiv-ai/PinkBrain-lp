@@ -2,6 +2,8 @@
 
 This runbook captures the preferred operating model after the March 28, 2026 hardening passes.
 
+For deployment topology guidance specific to the embedded Bags App Store runtime, read `docs/deploy.md` alongside this runbook.
+
 ## 1. Operator Access Model
 
 Preferred browser sign-in flow:
@@ -166,3 +168,4 @@ Still not publicly confirmed:
 - `postMessage` schema for embedded apps
 
 Treat embedded mode as capability-detected rather than contractually guaranteed.
+Track the broader list of external and upstream risks in `docs/known-risks.md`.

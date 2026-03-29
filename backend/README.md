@@ -56,7 +56,7 @@ Most important settings:
 | `DRY_RUN` | Safe execution toggle |
 | `EXECUTION_KILL_SWITCH` | Hard stop for live execution |
 
-See [/.env.example](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/.env.example) for the full list.
+See [../.env.example](../.env.example) for the full list.
 
 ## Auth Model
 
@@ -118,8 +118,9 @@ npm exec --workspace backend -- vitest run tests/rate-limits.test.ts
 
 ## Related Docs
 
-- [README.md](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/README.md)
-- [PRD.md](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/PRD.md)
-- [runbook.md](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/docs/runbook.md)
-- [remote-signer.md](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/docs/operations/remote-signer.md)
-- [secret-rotation.md](/C:/Users/lucid/Desktop/pinkbrain%20LP%20git/docs/operations/secret-rotation.md)
+- [README.md](../README.md)
+- [PRD.md](../PRD.md)
+- [runbook.md](../docs/runbook.md)
+- [deploy.md](../docs/deploy.md)
+- [remote-signer.md](../docs/operations/remote-signer.md)
+- [secret-rotation.md](../docs/operations/secret-rotation.md)

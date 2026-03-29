@@ -253,6 +253,18 @@ The frontend may run:
 
 The `useBagsAuth` bridge remains optional context support, not the primary operator auth path.
 
+### Embedded Delivery
+
+The intended production experience is an embedded Bags App Store deployment, not a generic dashboard that only happens to work in an iframe.
+
+That means the product documentation and deployment guidance must preserve all of the following truths:
+
+- the operator UI can run inside a Bags iframe without relying on the raw backend bearer token
+- the Bags bridge is capability-detected and optional, not assumed
+- `postMessage` flows must stay origin-scoped
+- same-origin or reverse-proxied API routing is the preferred deployment shape for embedded production use
+- frontend CSP and backend trusted-origin settings must be aligned with the real deployment topology
+
 ## Deployment Requirements
 
 ### Backend
@@ -267,6 +279,7 @@ The `useBagsAuth` bridge remains optional context support, not the primary opera
 - static hosting is acceptable
 - CSP must allow the actual API origin if `VITE_API_URL` points off-origin
 - iframe embedding must stay restricted to Bags-controlled origins
+- embedded cookie behavior must be validated in the real Bags-hosted runtime, not just standalone local development
 
 ## Operations
 
@@ -302,6 +315,7 @@ The codebase is considered healthy when:
 - signer behavior preserves transaction confirmation context
 - distribution math remains integer-safe
 - docs describe the real architecture rather than an earlier prototype
+- docs make the embedded app-store operating model explicit instead of implying a generic standalone SaaS dashboard
 
 ## Current Status
 
