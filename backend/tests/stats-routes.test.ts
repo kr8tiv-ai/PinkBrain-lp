@@ -47,7 +47,7 @@ function createConfig(overrides?: Partial<Config>): Config {
 }
 
 function seedStrategy(id: string, status: 'ACTIVE' | 'PAUSED' = 'ACTIVE') {
-  const now = new Date('2026-03-29T00:00:00.000Z').toISOString();
+  const now = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   database.getDb().prepare(`
     INSERT INTO strategies (
       id, owner_wallet, source, target_token_a, target_token_b, distribution_token,
@@ -75,12 +75,18 @@ function seedStrategy(id: string, status: 'ACTIVE' | 'PAUSED' = 'ACTIVE') {
 }
 
 function seedRun(id: string, strategyId: string, state: 'COMPLETE' | 'FAILED') {
+  const now = Date.now();
+  // COMPLETE run: started ~3h ago, took 3 min
+  // FAILED run:   started ~1h ago, took 2 min (within 24h window)
   const startedAt = state === 'COMPLETE'
-    ? '2026-03-29T00:00:00.000Z'
-    : '2026-03-29T06:00:00.000Z';
+    ? new Date(now - 3 * 60 * 60 * 1000).toISOString()
+    : new Date(now - 1 * 60 * 60 * 1000).toISOString();
   const finishedAt = state === 'COMPLETE'
-    ? '2026-03-29T00:03:00.000Z'
-    : '2026-03-29T06:02:00.000Z';
+    ? new Date(now - 3 * 60 * 60 * 1000 + 3 * 60 * 1000).toISOString()
+    : new Date(now - 1 * 60 * 60 * 1000 + 2 * 60 * 1000).toISOString();
+  const claimConfirmedAt = state === 'COMPLETE'
+    ? new Date(now - 3 * 60 * 60 * 1000 + 1 * 60 * 1000).toISOString()
+    : null;
 
   database.getDb().prepare(`
     INSERT INTO runs (
@@ -95,7 +101,7 @@ function seedRun(id: string, strategyId: string, state: 'COMPLETE' | 'FAILED') {
     state === 'COMPLETE' ? JSON.stringify({
       claimableAmount: 1_000_000_000,
       txSignature: 'claim-sig',
-      confirmedAt: '2026-03-29T00:01:00.000Z',
+      confirmedAt: claimConfirmedAt,
     }) : null,
     state === 'COMPLETE' ? JSON.stringify({ txSignatures: ['swap-a'] }) : null,
     state === 'COMPLETE' ? JSON.stringify({
@@ -211,8 +217,8 @@ describe('stats routes', () => {
       performance: {
         averageDurationMs: 150000,
         averageDurationSeconds: 150,
-        lastSuccessfulRunAt: '2026-03-29T00:03:00.000Z',
-        lastFailedRunAt: '2026-03-29T06:02:00.000Z',
+        lastSuccessfulRunAt: expect.any(String),
+        lastFailedRunAt: expect.any(String),
         recentFailures24h: 1,
       },
       valueFlow: {

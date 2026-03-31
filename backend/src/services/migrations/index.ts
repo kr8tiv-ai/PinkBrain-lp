@@ -13,6 +13,7 @@ import type { Migration } from './001_strategies.js';
 import { migration001 } from './001_strategies.js';
 import { migration002 } from './002_audit_log.js';
 import { migration003 } from './003_auth_bootstrap_tokens.js';
+import { migration011 } from './011_webhooks.js';
 
 export type { Migration };
 
@@ -20,4 +21,5 @@ export const migrations: Migration[] = [
   migration001,
   migration002,
   migration003,
+  migration011,
 ];

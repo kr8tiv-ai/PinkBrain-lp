@@ -46,6 +46,10 @@ export interface Config {
   remoteSignerAuthToken: string;
   remoteSignerTimeoutMs: number;
 
+  // Jito MEV bundles
+  useJitoBundles: boolean;
+  jitoTipLamports: number;
+
   // Runtime execution policy
   dryRun: boolean;
   executionKillSwitch: boolean;
@@ -161,6 +165,10 @@ export function loadConfig(): Config {
     remoteSignerUrl,
     remoteSignerAuthToken,
     remoteSignerTimeoutMs: getEnvNumber('REMOTE_SIGNER_TIMEOUT_MS', 10000),
+
+    // Jito MEV bundles
+    useJitoBundles: getEnvBoolean('USE_JITO_BUNDLES', false),
+    jitoTipLamports: getEnvNumber('JITO_TIP_LAMPORTS', 10_000),
 
     // Runtime execution policy
     dryRun: getEnvBoolean('DRY_RUN', false),

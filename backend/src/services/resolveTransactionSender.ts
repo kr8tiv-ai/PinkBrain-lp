@@ -29,6 +29,10 @@ export async function resolveTransactionSender(
       sender: createKeypairTransactionSender({
         connection,
         privateKey: config.signerPrivateKey,
+        jitoConfig: {
+          enabled: config.useJitoBundles,
+          tipLamports: config.jitoTipLamports,
+        },
       }),
       source: 'private-key',
       resolvedWalletAddress: null,
@@ -49,6 +53,10 @@ export async function resolveTransactionSender(
       sender: createKeypairTransactionSender({
         connection,
         privateKey: exported.privateKey,
+        jitoConfig: {
+          enabled: config.useJitoBundles,
+          tipLamports: config.jitoTipLamports,
+        },
       }),
       source: 'bags-agent',
       resolvedWalletAddress: walletAddress,
