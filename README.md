@@ -160,6 +160,11 @@ The frontend is designed to run inside a Bags App Store iframe. It capability-de
 - **Owner-only**: all LP fees route to a single wallet
 - **Top 100 holders**: fees distributed proportionally to the top 100 token holders using bigint-safe math
 
+### Supporting Services
+- **Backup Service** (`BackupService.ts`) -- database backup and restore for SQLite persistence
+- **Webhook Service** (`WebhookService.ts`) -- event notifications for run lifecycle, phase transitions, and failures
+- **Strategy Insights Service** (`StrategyInsightsService.ts`) -- cross-strategy analytics surfaced via `GET /api/strategies/insights`
+
 ### Remote Signer Path
 Production deployments isolate the signing key on a separate host behind an authenticated `/sign-and-send` contract. The main backend never holds the long-lived key. Break-glass wallet export is disabled by default.
 
